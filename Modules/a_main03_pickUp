@@ -1,0 +1,1019 @@
+'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Module: a_main03_pickUp
+
+'--- PROCEDURES
+'3.1A Sub pickUp_createBolsOnActiveManifest()
+'3.1B Sub pickUp_printBols()
+'3.1C Sub Sub pickUp_saveBols()
+'3.2A Sub pickUp_createCommInvsOnActiveManifest()
+'3.2B Sub pickUp_printCommInvs()
+'3.2C Sub pickUp_saveCommInvs()
+'3.3  Sub pickUp_ba_freightLabels()
+'3.4  Sub pickUp_ba_cartonLabels()
+'3.5  Sub pickUp_ba_shippingLabels()
+'3.6A Sub pickUp_ba_submitAsns()
+'3.6B Sub pickUp_importAsns()
+'3.7A Sub pickUp_ba_submitInvoices()
+'3.7B Sub pickUp_importSubdInvoices()
+'3.8  Sub pickUp_emailEstesConfirmation()
+
+'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+'--- OPTIONS
+Option Explicit
+Option Base 1
+
+
+'----------------------------------------------------
+'--- SUBS
+'----------------------------------------------------
+
+
+''''''''''''''''''''
+' 3.1A
+''''''''''''''''''''
+Sub pickUp_createBolsOnActiveManifest()
+    Dim procTitle As String: procTitle = "pickUp_createBolsOnActiveManifest"
+    
+    Dim wsName As String: wsName = ActiveSheet.name 'get manifest
+
+    Dim msg As String: msg = ""
+    msg = msg & "Enter a single ARN or comma-seperated list." & endl(1)
+    msg = msg & "Enter 'all' to update create BOLs for all relevant ARNs on the manifest." & endl(1)
+    msg = msg & endl(1)
+    msg = msg & "(Max 255 characters. So, that's max of 21 ARNs seperated by commas)" & endl(1)
+    
+    Dim arnsToBol As Variant: arnsToBol = prompt_inputSplitList(msg, procTitle, ",", True, "lower")
+    If convert_1dArr_Str(arnsToBol, "", "") = ERROR_QUIT_PROCEDURE Or _
+       convert_1dArr_Str(arnsToBol, "", "") = "" Then
+        Call prompt_alert("BOL Creation Canceled.", procTitle)
+        End
+    End If
+
+    Dim shipments As Variant
+    
+    If arnsToBol(1) = "all" Then
+        shipments = getShipmentsFromManifest(wsName, True, False, "scac,scac", "UPSN,EMSY", "<>,<>") 'get shipments
+    Else
+        Dim a As Integer: a = LBound(arnsToBol)
+        While a <= UBound(arnsToBol)
+        
+            Dim shipment As Variant: shipment = getShipmentsFromManifest(wsName, True, False, "scac,scac,arn", "UPSN,EMSY," & CStr(arnsToBol(a)), "<>,<>,=") 'get shipments
+            If isVariantArrayInit(shipment) = True Then
+                Call variantPush(shipments, shipment(1))
+                Erase shipment
+            End If
+            
+            a = a + 1
+        Wend
+    End If
+    Call endIfNotInit(shipments, "No BOLs to create.", "BOL Creation Canceled") 'quit if no BOLs found
+
+    Dim amzWharehouses As Variant: amzWharehouses = getValues(WS_WAREHOUSES_AMZ_NAME, 1, 1, 0, 0)
+    Dim ewWarehouses As Variant:   ewWarehouses = getValues(WS_WAREHOUSES_EW_NAME, 1, 1, 0, 0)
+    Dim carriers As Variant:       carriers = getValues(WS_NAME_CARRIERS, 1, 1, 0, 0)
+    
+    If wsExists(WS_NAME_BOL) = True Then deleteSheet (WS_NAME_BOL)
+    Dim wsBolName As String: wsBolName = copySheet(WS_NAME_BOL_TEMPLATE, WS_NAME_BOL, WS_NAME_HIDDEN_DIVIDER_DOC) 'copy bol template
+    Dim wsBol As Worksheet:  Set wsBol = ActiveWorkbook.Sheets(wsBolName)
+    
+    Dim templateData As Variant: templateData = getValues(WS_NAME_BOL_TEMPLATE, 1, 1, 0, 0)
+    Dim interval As Integer: interval = UBound(templateData, 1)
+    Dim bolHeight As Integer: bolHeight = UBound(templateData, 1)
+    Dim bolWidth As Integer:  bolWidth = UBound(templateData, 2)
+    
+    Dim shipDate As cellRef:  Set shipDate = New cellRef:  Call shipDate.constructor(templateData, BOL_CELL_REF_SHIP_DATE)
+    
+    Dim shipFromCNm As cellRef: Set shipFromCNm = New cellRef: Call shipFromCNm.constructor(templateData, BOL_CELL_REF_SHIP_FROM_NAME)
+    Dim shipFrom1 As cellRef:   Set shipFrom1 = New cellRef:   Call shipFrom1.constructor(templateData, BOL_CELL_REF_SHIPFROMLOC_ADDRESS_1)
+    Dim shipFrom2 As cellRef:   Set shipFrom2 = New cellRef:   Call shipFrom2.constructor(templateData, BOL_CELL_REF_SHIPFROMLOC_ADDRESS_2)
+    Dim shipFrom3 As cellRef:   Set shipFrom3 = New cellRef:   Call shipFrom3.constructor(templateData, BOL_CELL_REF_SHIPFROMLOC_ADDRESS_3)
+    
+    Dim shipToCNm As cellRef: Set shipToCNm = New cellRef: Call shipToCNm.constructor(templateData, BOL_CELL_REF_SHIP_TO_CONTACT_NAME)
+    Dim shipToLc1 As cellRef: Set shipToLc1 = New cellRef: Call shipToLc1.constructor(templateData, BOL_CELL_REF_SHIPTOLOC_ADDRESS_1)
+    Dim shipToLc2 As cellRef: Set shipToLc2 = New cellRef: Call shipToLc2.constructor(templateData, BOL_CELL_REF_SHIPTOLOC_ADDRESS_2)
+    Dim shipToLc3 As cellRef: Set shipToLc3 = New cellRef: Call shipToLc3.constructor(templateData, BOL_CELL_REF_SHIPTOLOC_ADDRESS_3)
+    
+    Dim bolNumber As cellRef: Set bolNumber = New cellRef: Call bolNumber.constructor(templateData, BOL_CELL_REF_BOL_NUMBER)
+    Dim carrierNm As cellRef: Set carrierNm = New cellRef: Call carrierNm.constructor(templateData, BOL_CELL_REF_CARRIER_NAME)
+    Dim scacCode As cellRef:  Set scacCode = New cellRef:  Call scacCode.constructor(templateData, BOL_CELL_REF_SCAC_NAME)
+    Dim allPos As cellRef:    Set allPos = New cellRef:    Call allPos.constructor(templateData, BOL_CELL_REF_ALL_POS)
+    Dim arnNumber As cellRef: Set arnNumber = New cellRef: Call arnNumber.constructor(templateData, BOL_CELL_REF_ARN_NUMBER)
+    
+    Dim totalPlt1 As cellRef: Set totalPlt1 = New cellRef: Call totalPlt1.constructor(templateData, BOL_CELL_REF_TOTAL_PALLETS_1)
+    Dim totalCrtn As cellRef: Set totalCrtn = New cellRef: Call totalCrtn.constructor(templateData, BOL_CELL_REF_TOTAL_CARTONS)
+    Dim totalQnt1 As cellRef: Set totalQnt1 = New cellRef: Call totalQnt1.constructor(templateData, BOL_CELL_REF_TOTAL_QUANTITY_1)
+    Dim totalWgt1 As cellRef: Set totalWgt1 = New cellRef: Call totalWgt1.constructor(templateData, BOL_CELL_REF_TOTAL_WEIGHT_1)
+    
+    Dim totalCrtn2 As cellRef: Set totalCrtn2 = New cellRef: Call totalCrtn2.constructor(templateData, BOL_CELL_REF_TOTAL_CARTONS_2)
+    Dim totalPlt2 As cellRef:  Set totalPlt2 = New cellRef:  Call totalPlt2.constructor(templateData, BOL_CELL_REF_TOTAL_PALLETS_2)
+    Dim totalQnt2 As cellRef:  Set totalQnt2 = New cellRef:  Call totalQnt2.constructor(templateData, BOL_CELL_REF_TOTAL_QUANTITY_2)
+    Dim totalWgt2 As cellRef:  Set totalWgt2 = New cellRef:  Call totalWgt2.constructor(templateData, BOL_CELL_REF_TOTAL_WEIGHT_2)
+    
+    Dim commodityDesc1 As cellRef: Set commodityDesc1 = New cellRef: Call commodityDesc1.constructor(templateData, BOL_CELL_REF_COMMODITY_DESCRIPTION_1)
+    Dim commodityDesc2 As cellRef: Set commodityDesc2 = New cellRef: Call commodityDesc2.constructor(templateData, BOL_CELL_REF_COMMODITY_DESCRIPTION_2)
+
+    Dim s As Integer
+    Dim ti As Integer
+    Dim row As Integer
+    
+    s = LBound(shipments) 'for each shipment add new manifest
+    ti = 0
+    row = 1
+    
+    wsBol.Range(Cells(1, 1), Cells(bolHeight, bolWidth)).Copy
+
+    While s <= UBound(shipments)
+
+        ti = (s - 1) * interval 'ti for totalInterval
+
+        wsBol.Range(Cells(ti + 1, 1), Cells(ti + bolHeight, bolWidth)).PasteSpecial Paste:=xlPasteValues
+        wsBol.Range(Cells(ti + 1, 1), Cells(ti + bolHeight, bolWidth)).PasteSpecial Paste:=xlPasteFormats
+        s = s + 1
+    Wend
+
+    s = LBound(shipments) 'for each shipment add new manifest
+    ti = 0
+    row = 1
+    
+    Dim errors As String: errors = ""
+    Dim errorCount As Integer: errorCount = 0
+    
+    While s <= UBound(shipments)
+
+        Dim place As String: place = shipments(s).arnNum
+        
+        ti = (s - 1) * interval 'ti for totalInterval
+        Dim orders As Variant: orders = shipments(s).orders
+        
+        Dim allPosStr As String: allPosStr = ""
+        Dim allPosArr As Variant
+        Dim allPosArrUnique As Variant
+        
+        Dim allSkuStr As String: allSkuStr = ""
+        Dim allSkuArr As Variant
+        Dim allSkuArrUnique As Variant
+        
+        Dim order As order
+        Dim o As Integer
+        
+        o = LBound(shipments(s).orders)
+        While o <= UBound(shipments(s).orders)
+            Set order = orders(o)
+            Call variantPush(allPosArr, order.po)
+            Call variantPush(allSkuArr, order.sku)
+            o = o + 1
+        Wend
+        
+        allPosArrUnique = unique(allPosArr)
+        allSkuArrUnique = unique(allSkuArr)
+        
+        o = LBound(allPosArrUnique)
+        While o <= UBound(allPosArrUnique)
+            allPosStr = allPosStr & allPosArrUnique(o) & ", "
+            o = o + 1
+        Wend
+        
+        o = LBound(allSkuArrUnique)
+        While o <= UBound(allSkuArrUnique)
+            allSkuStr = allSkuStr & allSkuArrUnique(o) & ", "
+            o = o + 1
+        Wend
+        
+        allPosStr = Left(allPosStr, Len(allPosStr) - 2)
+        allSkuStr = Left(allSkuStr, Len(allSkuStr) - 2)
+        
+        Dim shipToLoc As String: shipToLoc = shipments(s).shipToLoc
+        Dim shipTo_streetAddress As String: shipTo_streetAddress = vLookup(shipToLoc, amzWharehouses, WS_WAREHOUSES_AMZ_COL_STREET_ADDRESS, 1, True)
+        Dim shipTo_city As String:          shipTo_city = vLookup(shipToLoc, amzWharehouses, WS_WAREHOUSES_AMZ_COL_CITY, 1, True)
+        Dim shipTo_zip As String:           shipTo_zip = vLookup(shipToLoc, amzWharehouses, WS_WAREHOUSES_AMZ_COL_ZIP, 1, True)
+        Dim shipTo_country As String:       shipTo_country = vLookup(shipToLoc, amzWharehouses, WS_WAREHOUSES_AMZ_COL_COUNTRY, 1, True)
+        Dim shipTo_contactName As String:   shipTo_contactName = vLookup(shipToLoc, amzWharehouses, WS_WAREHOUSES_AMZ_COL_CONTACTNAME, 1, True)
+
+        Dim shipFromLoc As String: shipFromLoc = shipments(s).shipFromLoc
+
+        Dim shipFrom_streetAddress As String: shipFrom_streetAddress = vLookup(shipFromLoc, ewWarehouses, WS_WAREHOUSES_EW_COL_STREET_ADDRESS, 1, True)
+        Dim shipFrom_city As String:          shipFrom_city = vLookup(shipFromLoc, ewWarehouses, WS_WAREHOUSES_EW_COL_CITY, 1, True)
+        Dim shipFrom_zip As String:           shipFrom_zip = vLookup(shipFromLoc, ewWarehouses, WS_WAREHOUSES_EW_COL_ZIP, 1, True)
+        Dim shipFrom_country As String:       shipFrom_country = vLookup(shipFromLoc, ewWarehouses, WS_WAREHOUSES_EW_COL_COUNTRY, 1, True)
+        Dim shipFrom_contactName As String:   shipFrom_contactName = vLookup(shipFromLoc, ewWarehouses, WS_WAREHOUSES_EW_COL_CONTACT_NAME, 1, True) & " " & _
+                                                                     "(" & vLookup(shipFromLoc, ewWarehouses, WS_WAREHOUSES_EW_COL_CONTACT_NUM, 1, True) & ")"
+                                            
+        Dim carrier As String: carrier = vLookup(shipments(s).scac, carriers, WS_CARRIERS_COL_FULL_NAME)
+
+        wsBol.Cells(shipDate.row + ti, shipDate.col) = shipments(s).shipDate
+        wsBol.Cells(shipFromCNm.row + ti, shipFromCNm.col) = shipFrom_contactName
+        wsBol.Cells(shipFrom1.row + ti, shipFrom1.col) = shipFrom_streetAddress
+        wsBol.Cells(shipFrom2.row + ti, shipFrom2.col) = shipFrom_city & " " & shipFrom_zip
+        wsBol.Cells(shipFrom3.row + ti, shipFrom3.col) = shipFrom_country
+        
+        wsBol.Cells(shipToCNm.row + ti, shipToCNm.col) = shipTo_contactName
+        
+        wsBol.Cells(shipToLc1.row + ti, shipToLc1.col) = shipTo_streetAddress
+        If shipTo_streetAddress = "" Then
+            errors = errors & place & ": missing shipTo_streetAddress" & endl(1)
+            errorCount = errorCount + 1
+        End If
+        
+        wsBol.Cells(shipToLc2.row + ti, shipToLc2.col) = shipTo_city & " " & shipTo_zip
+        If shipTo_city = "" Then
+            errors = errors & place & ": missing shipTo_city" & endl(1)
+            errorCount = errorCount + 1
+        End If
+        If shipTo_zip = "" Then
+            errors = errors & place & ": missing shipTo_zip" & endl(1)
+            errorCount = errorCount + 1
+        End If
+        
+        wsBol.Cells(shipToLc3.row + ti, shipToLc3.col) = shipTo_country
+        If shipTo_country = "" Then
+            errors = errors & place & ": missing shipTo_country" & endl(1)
+            errorCount = errorCount + 1
+        End If
+        
+        wsBol.Cells(bolNumber.row + ti, bolNumber.col) = shipments(s).shipmentRefId
+        wsBol.Cells(carrierNm.row + ti, carrierNm.col) = carrier
+        If carrier = "" Then
+            errors = errors & place & ": missing carrier" & endl(1)
+            errorCount = errorCount + 1
+        End If
+        
+        wsBol.Cells(scacCode.row + ti, scacCode.col) = shipments(s).scac
+        wsBol.Cells(allPos.row + ti, allPos.col) = allPosStr
+        wsBol.Cells(arnNumber.row + ti, arnNumber.col) = shipments(s).arnNum
+        wsBol.Cells(totalPlt1.row + ti, totalPlt1.col) = shipments(s).totalPallets
+        wsBol.Cells(totalPlt2.row + ti, totalPlt2.col) = shipments(s).totalPallets
+        wsBol.Cells(totalQnt1.row + ti, totalQnt1.col) = shipments(s).totalQuantity
+        wsBol.Cells(totalWgt1.row + ti, totalWgt1.col) = shipments(s).totalWeight
+        wsBol.Cells(totalWgt2.row + ti, totalWgt2.col) = shipments(s).totalWeight
+        wsBol.Cells(totalCrtn.row + ti, totalCrtn.col) = shipments(s).totalCartons
+        wsBol.Cells(totalCrtn2.row + ti, totalCrtn2.col) = shipments(s).totalCartons
+        
+        wsBol.Cells(commodityDesc1.row + ti, commodityDesc1.col) = "Water Filtration - "
+        wsBol.Cells(commodityDesc2.row + ti, commodityDesc2.col) = allSkuStr
+    
+        Erase allPosArr
+        Erase allPosArrUnique
+
+        Erase allSkuArr
+        Erase allSkuArrUnique
+        
+        s = s + 1
+    Wend
+    
+    Dim endMsg As String: endMsg = ""
+    endMsg = endMsg & "BOLs from Manifest '" & wsName & "' have been generated" & endl(1)
+    endMsg = endMsg & endl(1)
+    If errorCount = 0 Then
+        endMsg = endMsg & "No errors found. BOLs ready to print" & endl(1)
+    ElseIf errorCount >= 1 Then
+        endMsg = endMsg & errorCount & " errors found:" & endl(1)
+        endMsg = endMsg & endl(1)
+        endMsg = endMsg & errors & endl(1)
+        endMsg = endMsg & endl(1)
+        endMsg = endMsg & "Please fix the errors before printing the BOLs." & endl(1)
+        endMsg = endMsg & "Use the 4.X Buttons on the Macros Sheet to update any missing info." & endl(1)
+    End If
+
+    Call prompt_alert(endMsg, procTitle)
+End Sub
+''''''''''''''''''''
+' 3.1B
+''''''''''''''''''''
+Sub pickUp_printBols()
+    Dim procTitle As String: procTitle = "pickUp_printBols"
+
+    Dim activePrinterName As String: activePrinterName = getMacroParameter(procTitle, "Printer Name", False)
+    
+    Dim ws As Worksheet: Set ws = ActiveSheet
+    Dim wsName As String: wsName = ws.name
+    Dim data As Variant: data = getValues(wsName, 1, 1, 0, 0)
+    Dim rows As Integer: rows = UBound(data, 1)
+    Dim cols As Integer: cols = UBound(data, 2)
+    
+    Dim copies As Integer: copies = 2
+    Dim collate As Boolean: collate = False
+    Dim preview As Boolean: preview = True
+
+    Range(Cells(1, 1), Cells(rows, cols)).Select
+    Call printOutSetUp(wsName, activePrinterName, "portrait", 1, 1, rows, cols, 1, collate, preview)
+    
+    Application.CommandBars.ExecuteMso ("PrintPreviewAndPrint")
+End Sub
+''''''''''''''''''''
+' 3.1C
+''''''''''''''''''''
+Sub pickUp_saveBols()
+    Dim procTitle As String: procTitle = "pickUp_saveBols"
+    
+    Dim wb As Workbook: Set wb = ActiveWorkbook
+    
+    Dim ws As Worksheet: Set ws = ActiveSheet
+    Dim wsName As String: wsName = ws.name
+    Dim data As Variant: data = getValues(wsName, 1, 1, 0, 0)
+    Dim rows As Integer: rows = UBound(data, 1)
+    Dim cols As Integer: cols = UBound(data, 2)
+    
+    Dim templateWsName As String: templateWsName = WS_NAME_BOL_TEMPLATE
+    Dim templateWs As Worksheet: Set templateWs = wb.Sheets(templateWsName)
+    Dim templateData As Variant: templateData = getValues(templateWsName, 1, 1, 0, 0)
+    Dim templateRows As Integer: templateRows = UBound(templateData, 1)
+    
+    Dim bolSize As Integer: bolSize = templateRows
+    Dim arnNumber As cellRef: Set arnNumber = New cellRef: Call arnNumber.constructor(templateData, BOL_CELL_REF_ARN_NUMBER)
+
+    Dim row As Integer: row = 1
+    While row < rows
+        Dim fileName As String: fileName = "BOL_" & data(arnNumber.row + row - 1, arnNumber.col)
+        Call saveWorksheetAsPdf(wb, ws, fileName, row, 1, bolSize + row - 1, cols)
+        row = row + bolSize
+    Wend
+End Sub
+
+
+''''''''''''''''''''
+' 3.2A pickUp_createCommInvsOnActiveManifest
+''''''''''''''''''''
+Sub pickUp_createCommInvsOnActiveManifest()
+    Dim procTitle As String: procTitle = "pickUp_createCommInvsOnActiveManifest"
+    
+    Dim wsName As String: wsName = ActiveSheet.name 'get manifest
+
+    Dim msg As String: msg = ""
+    msg = msg & "Enter a single ARN or comma-seperated list." & endl(1)
+    msg = msg & "Enter 'all' to update create Commercial Invoices for all relevant ARNs on the manifest." & endl(1)
+    
+    Dim comminvsToBol As Variant: comminvsToBol = prompt_inputSplitList(msg, procTitle, ",", True, "lower")
+    If convert_1dArr_Str(comminvsToBol, "", "") = ERROR_QUIT_PROCEDURE Or _
+       convert_1dArr_Str(comminvsToBol, "", "") = "" Then
+        Call prompt_alert("Commercial Invoice Creation Canceled.", procTitle)
+        End
+    End If
+    
+    Dim shipments As Variant
+    
+    If comminvsToBol(1) = "all" Then
+        shipments = getShipmentsFromManifest(wsName, True, False, "shiptocountry", "can", "=") 'get shipments
+    Else
+        Dim a As Integer: a = LBound(comminvsToBol)
+        While a <= UBound(comminvsToBol)
+        
+            Dim shipment As Variant: shipment = getShipmentsFromManifest(wsName, True, False, "shiptocountry,arn", "can," & CStr(comminvsToBol(a)), "=,=") 'get shipments
+            If isVariantArrayInit(shipment) = True Then
+                Call variantPush(shipments, shipment(1))
+                Erase shipment
+            End If
+            
+            a = a + 1
+        Wend
+    End If
+    
+    Call endIfNotInit(shipments, "No Commercial Invoices to create.", "Commercial Invoice Creation Canceled") 'quit if no Comm Invs found
+    
+    Dim amzWharehouses As Variant: amzWharehouses = getValues(WS_WAREHOUSES_AMZ_NAME, 1, 1, 0, 0)
+    Dim ewWarehouses As Variant:   ewWarehouses = getValues(WS_WAREHOUSES_EW_NAME, 1, 1, 0, 0)
+    Dim carriers As Variant:       carriers = getValues(WS_NAME_CARRIERS, 1, 1, 0, 0)
+
+    If wsExists(WS_NAME_COMMINV) = True Then deleteSheet (WS_NAME_COMMINV)
+    Dim wsCommInvName As String: wsCommInvName = copySheet(WS_NAME_COMMINV_TEMPLATE, WS_NAME_COMMINV, WS_NAME_HIDDEN_DIVIDER_DOC) 'copy comm inv template
+    Dim wsCommInv As Worksheet:  Set wsCommInv = ActiveWorkbook.Sheets(wsCommInvName)
+    
+    Dim templateData As Variant: templateData = getValues(WS_NAME_COMMINV_TEMPLATE, 1, 1, 0, 0)
+    Dim interval As Integer: interval = UBound(templateData, 1)
+    Dim commInvHeight As Integer: commInvHeight = UBound(templateData, 1)
+    Dim commInvWidth As Integer:  commInvWidth = UBound(templateData, 2)
+    
+    Dim shipDate As cellRef:  Set shipDate = New cellRef:  Call shipDate.constructor(templateData, COMMINV_CELL_REF_SHIP_DATE)
+    
+    Dim shipFromCNm As cellRef: Set shipFromCNm = New cellRef: Call shipFromCNm.constructor(templateData, COMMINV_CELL_REF_SHIP_FROM_CONTACT_NAME)
+    Dim shipFrom1 As cellRef: Set shipFrom1 = New cellRef: Call shipFrom1.constructor(templateData, COMMINV_CELL_REF_SHIPFROMLOC_ADDRESS_1)
+    Dim shipFrom2 As cellRef: Set shipFrom2 = New cellRef: Call shipFrom2.constructor(templateData, COMMINV_CELL_REF_SHIPFROMLOC_ADDRESS_2)
+    Dim shipFrom3 As cellRef: Set shipFrom3 = New cellRef: Call shipFrom3.constructor(templateData, COMMINV_CELL_REF_SHIPFROMLOC_ADDRESS_3)
+    
+    Dim shipToCNm As cellRef: Set shipToCNm = New cellRef: Call shipToCNm.constructor(templateData, COMMINV_CELL_REF_SHIP_TO_CONTACT_NAME)
+    Dim shipToLc1 As cellRef: Set shipToLc1 = New cellRef: Call shipToLc1.constructor(templateData, COMMINV_CELL_REF_SHIPTOLOC_ADDRESS_1)
+    Dim shipToLc2 As cellRef: Set shipToLc2 = New cellRef: Call shipToLc2.constructor(templateData, COMMINV_CELL_REF_SHIPTOLOC_ADDRESS_2)
+    Dim shipToLc3 As cellRef: Set shipToLc3 = New cellRef: Call shipToLc3.constructor(templateData, COMMINV_CELL_REF_SHIPTOLOC_ADDRESS_3)
+    
+    Dim allPos As cellRef:    Set allPos = New cellRef:    Call allPos.constructor(templateData, COMMINV_CELL_REF_ALL_POS)
+    Dim arnNumber As cellRef: Set arnNumber = New cellRef: Call arnNumber.constructor(templateData, COMMINV_CELL_REF_ARN_NUMBER)
+    Dim totalCrtn As cellRef: Set totalCrtn = New cellRef: Call totalCrtn.constructor(templateData, COMMINV_CELL_REF_NUM_OF_PACKAGES)
+    Dim totalWgt As cellRef:  Set totalWgt = New cellRef:  Call totalWgt.constructor(templateData, COMMINV_CELL_REF_TOTAL_WEIGHT)
+    Dim invNum As cellRef:    Set invNum = New cellRef:    Call invNum.constructor(templateData, COMMINV_CELL_REF_INVOICE_NUM)
+    
+    Dim invTotal As cellRef:     Set invTotal = New cellRef:     Call invTotal.constructor(templateData, COMMINV_CELL_REF_TOTAL_INVOICE_AMOUNT)
+    Dim invSubTotal As cellRef:  Set invSubTotal = New cellRef:  Call invSubTotal.constructor(templateData, COMMINV_CELL_REF_INVOICE_SUB_TOTAL)
+    Dim invLineTotal As cellRef: Set invLineTotal = New cellRef: Call invLineTotal.constructor(templateData, COMMINV_CELL_REF_INVOICE_LINE_TOTAL)
+
+    Dim unitsFirstRow As cellRef:      Set unitsFirstRow = New cellRef:      Call unitsFirstRow.constructor(templateData, COMMINV_CELL_REF_UNITS_FIRST_ROW)
+    Dim umFirstRow As cellRef:         Set umFirstRow = New cellRef:         Call umFirstRow.constructor(templateData, COMMINV_CELL_REF_UM_FIRST_ROW)
+    Dim descFirstRow As cellRef:       Set descFirstRow = New cellRef:       Call descFirstRow.constructor(templateData, COMMINV_CELL_REF_DESC_FIRST_ROW)
+    Dim skuFirstRow As cellRef:        Set skuFirstRow = New cellRef:        Call skuFirstRow.constructor(templateData, COMMINV_CELL_REF_SKU_FIRST_ROW)
+    Dim asinFirstRow As cellRef:       Set asinFirstRow = New cellRef:       Call asinFirstRow.constructor(templateData, COMMINV_CELL_REF_ASIN_FIRST_ROW)
+    Dim harmCodeFirstRow As cellRef:   Set harmCodeFirstRow = New cellRef:   Call harmCodeFirstRow.constructor(templateData, COMMINV_CELL_REF_HARM_CODE_FIRST_ROW)
+    Dim ctoFirstRow As cellRef:        Set ctoFirstRow = New cellRef:        Call ctoFirstRow.constructor(templateData, COMMINV_CELL_REF_CTO_FIRST_ROW)
+    Dim unitValueFirstRow As cellRef:  Set unitValueFirstRow = New cellRef:  Call unitValueFirstRow.constructor(templateData, COMMINV_CELL_REF_UNIT_VALUE_FIRST_ROW)
+    Dim totalValueFirstRow As cellRef: Set totalValueFirstRow = New cellRef: Call totalValueFirstRow.constructor(templateData, COMMINV_CELL_REF_TOTAL_VALUE_FIRST_ROW)
+    
+    Dim s As Integer
+    Dim ti As Integer
+    Dim row As Integer
+    
+    s = LBound(shipments) 'for each shipment add new manifest
+    ti = 0
+    row = 1
+    
+    wsCommInv.Range(Cells(1, 1), Cells(commInvHeight, commInvWidth)).Copy
+
+    While s <= UBound(shipments)
+
+        ti = (s - 1) * interval 'ti for totalInterval
+
+        wsCommInv.Range(Cells(ti + 1, 1), Cells(ti + commInvHeight, commInvWidth)).PasteSpecial Paste:=xlPasteValues
+        wsCommInv.Range(Cells(ti + 1, 1), Cells(ti + commInvHeight, commInvWidth)).PasteSpecial Paste:=xlPasteFormats
+        s = s + 1
+    Wend
+
+    s = LBound(shipments) 'for each shipment add new manifest
+    ti = 0
+    row = 1
+    
+    Dim errors As String: errors = ""
+    Dim errorCount As Integer: errorCount = 0
+    
+    While s <= UBound(shipments)
+
+        Dim place As String: place = shipments(s).arnNum
+        
+        ti = (s - 1) * interval 'ti for totalInterval
+        Dim orders As Variant: orders = shipments(s).orders
+        Dim order As order
+    
+        Dim allPosStr As String: allPosStr = ""
+        Dim allPosArr As Variant
+        Dim allPosArrUnique As Variant
+        Dim invoiceTotalAmount As Double: invoiceTotalAmount = 0
+        Dim o As Integer
+       
+        o = LBound(shipments(s).orders)
+        While o <= UBound(shipments(s).orders)
+            Set order = orders(o)
+            Call variantPush(allPosArr, order.po)
+            invoiceTotalAmount = invoiceTotalAmount + (order.unitCost * order.quantExp)
+            o = o + 1
+        Wend
+
+        allPosArrUnique = unique(allPosArr)
+
+        o = LBound(allPosArrUnique)
+        While o <= UBound(allPosArrUnique)
+            allPosStr = allPosStr & allPosArrUnique(o) & ", "
+            o = o + 1
+        Wend
+        allPosStr = Left(allPosStr, Len(allPosStr) - 2)
+
+        Dim shipToLoc As String: shipToLoc = shipments(s).shipToLoc
+        Dim shipTo_streetAddress As String: shipTo_streetAddress = vLookup(shipToLoc, amzWharehouses, WS_WAREHOUSES_AMZ_COL_STREET_ADDRESS, 1, True)
+        Dim shipTo_city As String:          shipTo_city = vLookup(shipToLoc, amzWharehouses, WS_WAREHOUSES_AMZ_COL_CITY, 1, True)
+        Dim shipTo_zip As String:           shipTo_zip = vLookup(shipToLoc, amzWharehouses, WS_WAREHOUSES_AMZ_COL_ZIP, 1, True)
+        Dim shipTo_country As String:       shipTo_country = vLookup(shipToLoc, amzWharehouses, WS_WAREHOUSES_AMZ_COL_COUNTRY, 1, True)
+        Dim shipTo_contactName As String:   shipTo_contactName = vLookup(shipToLoc, amzWharehouses, WS_WAREHOUSES_AMZ_COL_CONTACTNAME, 1, True)
+
+        Dim shipFromLoc As String: shipFromLoc = shipments(s).shipFromLoc
+
+        Dim shipFrom_streetAddress As String: shipFrom_streetAddress = vLookup(shipFromLoc, ewWarehouses, WS_WAREHOUSES_EW_COL_STREET_ADDRESS, 1, True)
+        Dim shipFrom_city As String:          shipFrom_city = vLookup(shipFromLoc, ewWarehouses, WS_WAREHOUSES_EW_COL_CITY, 1, True)
+        Dim shipFrom_zip As String:           shipFrom_zip = vLookup(shipFromLoc, ewWarehouses, WS_WAREHOUSES_EW_COL_ZIP, 1, True)
+        Dim shipFrom_country As String:       shipFrom_country = vLookup(shipFromLoc, ewWarehouses, WS_WAREHOUSES_EW_COL_COUNTRY, 1, True)
+        Dim shipFrom_contactName As String:   shipFrom_contactName = vLookup(shipFromLoc, ewWarehouses, WS_WAREHOUSES_EW_COL_CONTACT_NAME, 1, True) & " " & _
+                                                                     vLookup(shipFromLoc, ewWarehouses, WS_WAREHOUSES_EW_COL_CONTACT_NUM, 1, True)
+
+        wsCommInv.Cells(shipDate.row + ti, shipDate.col) = shipments(s).shipDate
+        
+        wsCommInv.Cells(shipFromCNm.row + ti, shipFromCNm.col) = "Express Water"
+        wsCommInv.Cells(shipFrom1.row + ti, shipFrom1.col) = shipFrom_streetAddress
+        wsCommInv.Cells(shipFrom2.row + ti, shipFrom2.col) = shipFrom_city & " " & shipFrom_zip
+        wsCommInv.Cells(shipFrom3.row + ti, shipFrom3.col) = shipFrom_country
+        
+        wsCommInv.Cells(shipToCNm.row + ti, shipToCNm.col) = shipTo_contactName
+        
+        wsCommInv.Cells(shipToLc1.row + ti, shipToLc1.col) = shipTo_streetAddress
+        If shipTo_streetAddress = "" Then
+            errors = errors & place & ": missing shipTo_streetAddress" & endl(1)
+            errorCount = errorCount + 1
+        End If
+        
+        wsCommInv.Cells(shipToLc2.row + ti, shipToLc2.col) = shipTo_city & " " & shipTo_zip
+        If shipTo_city = "" Then
+            errors = errors & place & ": missing shipTo_city" & endl(1)
+            errorCount = errorCount + 1
+        End If
+        If shipTo_zip = "" Then
+            errors = errors & place & ": missing shipTo_zip" & endl(1)
+            errorCount = errorCount + 1
+        End If
+        
+        wsCommInv.Cells(shipToLc3.row + ti, shipToLc3.col) = shipTo_country
+        If shipTo_country = "" Then
+            errors = errors & place & ": missing shipTo_country" & endl(1)
+            errorCount = errorCount + 1
+        End If
+        
+        wsCommInv.Cells(invNum.row + ti, invNum.col) = shipments(s).invoiceId
+
+        wsCommInv.Cells(allPos.row + ti, allPos.col) = allPosStr
+        wsCommInv.Cells(arnNumber.row + ti, arnNumber.col) = shipments(s).arnNum
+
+        wsCommInv.Cells(totalWgt.row + ti, totalWgt.col) = shipments(s).totalWeight
+        wsCommInv.Cells(totalCrtn.row + ti, totalCrtn.col) = shipments(s).totalCartons
+
+        o = LBound(shipments(s).orders)
+        While o <= UBound(shipments(s).orders) And _
+              o <= COMMINV_MAX_GOODS
+        
+            Set order = orders(o)
+
+            wsCommInv.Cells(unitsFirstRow.row + ti + o - 1, unitsFirstRow.col) = order.quantExp
+            wsCommInv.Cells(umFirstRow.row + ti + o - 1, umFirstRow.col) = COMMINV_DEFAULT_UM
+            wsCommInv.Cells(descFirstRow.row + ti + o - 1, descFirstRow.col) = "Water Filtration"
+            wsCommInv.Cells(skuFirstRow.row + ti + o - 1, skuFirstRow.col) = order.sku
+            wsCommInv.Cells(asinFirstRow.row + ti + o - 1, asinFirstRow.col) = order.asin
+            wsCommInv.Cells(harmCodeFirstRow.row + ti + o - 1, harmCodeFirstRow.col) = COMMINV_DEFAULT_HARM_CODE
+            wsCommInv.Cells(ctoFirstRow.row + ti + o - 1, ctoFirstRow.col) = COMMINV_DEFAULT_CTO
+            wsCommInv.Cells(unitValueFirstRow.row + ti + o - 1, unitValueFirstRow.col) = order.unitCost
+            wsCommInv.Cells(totalValueFirstRow.row + ti + o - 1, totalValueFirstRow.col) = order.unitCost * order.quantExp
+            
+            o = o + 1
+        Wend
+        
+        wsCommInv.Cells(invTotal.row + ti, invTotal.col) = invoiceTotalAmount
+        wsCommInv.Cells(invSubTotal.row + ti, invSubTotal.col) = invoiceTotalAmount
+        wsCommInv.Cells(invLineTotal.row + ti, invLineTotal.col) = invoiceTotalAmount
+        
+        Erase allPosArr
+        Erase allPosArrUnique
+        
+        s = s + 1
+    Wend
+    
+    Dim endMsg As String: endMsg = ""
+    endMsg = endMsg & "Commercial Invoices from Manifest '" & wsName & "' have been generated" & endl(1)
+    endMsg = endMsg & endl(1)
+    If errorCount = 0 Then
+        endMsg = endMsg & "No errors found. Commercial Invoices ready to print" & endl(1)
+    ElseIf errorCount >= 1 Then
+        endMsg = endMsg & errorCount & " errors found:" & endl(1)
+        endMsg = endMsg & endl(1)
+        endMsg = endMsg & errors & endl(1)
+        endMsg = endMsg & endl(1)
+        endMsg = endMsg & "Please fix the errors before printing the Commercial Invoices." & endl(1)
+        endMsg = endMsg & "Use the 4.X Buttons on the Macros Sheet to update any missing info." & endl(1)
+    End If
+
+    Call prompt_alert(endMsg, procTitle)
+End Sub
+''''''''''''''''''''
+' 3.2B pickUp_printCommInvs
+''''''''''''''''''''
+Sub pickUp_printCommInvs()
+    Dim procTitle As String: procTitle = "pickUp_printCommInvs"
+
+    Dim activePrinterName As String: activePrinterName = getMacroParameter(procTitle, "Printer Name", False)
+    
+    Dim ws As Worksheet: Set ws = ActiveSheet
+    Dim wsName As String: wsName = ws.name
+    Dim data As Variant: data = getValues(wsName, 1, 1, 0, 0)
+    Dim rows As Integer: rows = UBound(data, 1)
+    Dim cols As Integer: cols = UBound(data, 2)
+
+    Dim copies As Integer: copies = 2
+    Dim collate As Boolean: collate = False
+    Dim preview As Boolean: preview = True
+
+    Range(Cells(1, 1), Cells(rows, cols)).Select
+    Call printOutSetUp(wsName, activePrinterName, "portrait", 1, 1, rows, cols, 1, collate, preview)
+    
+    Application.CommandBars.ExecuteMso ("PrintPreviewAndPrint")
+End Sub
+''''''''''''''''''''
+' 3.2C
+''''''''''''''''''''
+Sub pickUp_saveCommInvs()
+    Dim procTitle As String: procTitle = "pickUp_saveCommInvs"
+    
+    Dim wb As Workbook: Set wb = ActiveWorkbook
+    
+    Dim ws As Worksheet: Set ws = ActiveSheet
+    Dim wsName As String: wsName = ws.name
+    Dim data As Variant: data = getValues(wsName, 1, 1, 0, 0)
+    Dim rows As Integer: rows = UBound(data, 1)
+    Dim cols As Integer: cols = UBound(data, 2)
+    
+    Dim templateWsName As String: templateWsName = WS_NAME_COMMINV_TEMPLATE
+    Dim templateWs As Worksheet: Set templateWs = wb.Sheets(templateWsName)
+    Dim templateData As Variant: templateData = getValues(templateWsName, 1, 1, 0, 0)
+    Dim templateRows As Integer: templateRows = UBound(templateData, 1)
+    
+    Dim commInvSize As Integer: commInvSize = templateRows
+    Dim arnNumber As cellRef: Set arnNumber = New cellRef: Call arnNumber.constructor(templateData, COMMINV_CELL_REF_ARN_NUMBER)
+    Dim poNumbers As cellRef: Set poNumbers = New cellRef: Call poNumbers.constructor(templateData, COMMINV_CELL_REF_ALL_POS)
+    
+    Dim row As Integer: row = 1
+    While row < rows
+    
+        Dim fileName As String
+        fileName = "INV_" & _
+                   data(poNumbers.row + row - 1, poNumbers.col) & "_" & _
+                   data(arnNumber.row + row - 1, arnNumber.col)
+        
+        Call saveWorksheetAsPdf(wb, ws, fileName, row, 1, commInvSize + row - 1, cols)
+        row = row + commInvSize
+    Wend
+End Sub
+
+
+''''''''''''''''''''
+' 3.3 pickUp_ba_freightLabels
+''''''''''''''''''''
+Sub pickUp_ba_freightLabels()
+    Dim procTitle As String: procTitle = "pickUp_ba_freightLabels"
+    
+    Dim activeSheetName As String:        activeSheetName = ActiveWorkbook.ActiveSheet.name
+    Dim sel As seleniumBrowserAutomation: Set sel = New seleniumBrowserAutomation: Call sel.constructor
+    Dim code As String:                   code = sel.downloadAmazonFreightLabels(activeSheetName)
+    Dim path As String:                   path = "C:\Users\oscar\Desktop\downloadAmazonFreightLabels.py"
+    
+    Call writeToTextFile(path, code, True, True)
+
+    prompt_alert ("Run the newly created file to Download the Amazon Freight Labels." & endl(2) & "Located at: " & path)
+End Sub
+
+
+''''''''''''''''''''
+' 3.4 pickUp_ba_cartonLabels
+''''''''''''''''''''
+Sub pickUp_ba_cartonLabels()
+    Dim procTitle As String: procTitle = "pickUp_ba_cartonLabels"
+    
+    Dim activeSheetName As String:        activeSheetName = ActiveWorkbook.ActiveSheet.name
+    Dim sel As seleniumBrowserAutomation: Set sel = New seleniumBrowserAutomation: Call sel.constructor
+    Dim code As String:                   code = sel.downloadSPCartonLabels(activeSheetName)
+    Dim path As String:                   path = "C:\Users\oscar\Desktop\downloadSPCartonLabels.py"
+    
+    Call writeToTextFile(path, code, True, True)
+
+    prompt_alert ("Run the newly created file to Download the Small Parcel Carton Labels from VC." & endl(2) & "Located at: " & path)
+End Sub
+
+
+''''''''''''''''''''
+' 3.5 pickUp_ba_shippingLabels
+''''''''''''''''''''
+Sub pickUp_ba_shippingLabels()
+    Dim procTitle As String: procTitle = "pickUp_ba_shippingLabels"
+    
+    Dim activeSheetName As String:        activeSheetName = ActiveWorkbook.ActiveSheet.name
+    Dim sel As seleniumBrowserAutomation: Set sel = New seleniumBrowserAutomation: Call sel.constructor
+    Dim code As String:                   code = sel.downloadSPShippingLabels(activeSheetName)
+    Dim path As String:                   path = "C:\Users\oscar\Desktop\downloadSPShippingLabels.py"
+    
+    Call writeToTextFile(path, code, True, True)
+
+    prompt_alert ("Run the newly created file to Download the Small Parcel Shipping Labels from VC." & endl(2) & "Located at: " & path)
+End Sub
+
+
+''''''''''''''''''''
+' 3.6A pickUp_ba_submitAsns
+''''''''''''''''''''
+Sub pickUp_ba_submitAsns()
+    Dim procTitle As String: procTitle = "pickUp_ba_submitAsns"
+    
+    Dim activeSheetName As String:        activeSheetName = ActiveWorkbook.ActiveSheet.name
+    Dim sel As seleniumBrowserAutomation: Set sel = New seleniumBrowserAutomation: Call sel.constructor
+    Dim code As String:                   code = sel.submitASNs(activeSheetName)
+    Dim path As String:                   path = "C:\Users\oscar\Desktop\submitASNs.py"
+    
+    Call writeToTextFile(path, code, True, True)
+
+    prompt_alert ("Run the newly created file to Submit the ASNs in VC." & endl(2) & "Located at: " & path)
+End Sub
+''''''''''''''''''''
+' 3.6B pickUp_importAsns
+''''''''''''''''''''
+Sub pickUp_importAsns()
+    Dim procTitle As String: procTitle = "pickUp_importAsns"
+
+    Dim i, r As Integer 'reserved for loops
+    Dim ws As Worksheet:  Set ws = ActiveWorkbook.ActiveSheet
+    Dim wsName As String: wsName = ws.name
+    
+    'get list of valid csv files
+    Dim downloadsPath As String:    downloadsPath = "C:\Users\" & Environ("username") & "\Desktop"
+    Dim extensionsToList As String: extensionsToList = "csv"
+    
+    Dim fileNames As Variant:       fileNames = listOfFileNamesInPath(downloadsPath, extensionsToList, "", SUBMITTED_PROS_CSV_LEFT)
+    Call endIfNotInit(fileNames, "No valid CSV files found on the Desktop. Import Cancelled.", procTitle)  'quit if no files found
+    Call swap(fileNames)
+    
+    'prompt user for fileChoices
+    Dim fileList As String: fileList = ""
+    For i = LBound(fileNames) To UBound(fileNames)
+        fileList = fileList & "Enter " & i & " to choose: " & fileNames(i) & endl(1)
+    Next i
+    
+    Dim title As String:         title = "Choose file(s) (single or comma-seperated list)"
+    Dim delimeter As String:     delimeter = ","
+    Dim limitToRange As Boolean: limitToRange = True
+    
+    Dim fileChoices As Variant:  fileChoices = prompt_inputSplitList_int(fileList, title, delimeter, limitToRange, LBound(fileNames), UBound(fileNames))
+    
+    'loop through each fileChoices and add to manifest and archive
+    Dim archive As archive: Set archive = New archive: Call archive.constructor
+    
+    Dim manifestData As Variant:       manifestData = getValues(wsName, 1, 1, 0, 0)
+    Dim manifestHeaderRow As Variant:  manifestHeaderRow = isoRow_from_2dArr(manifestData, WS_MANIFEST_HEADER_ROW, False)
+    Dim col As col: Set col = New col: Call col.constructor(manifestHeaderRow)
+    
+    Dim totalOrders As Integer: totalOrders = 0
+    Dim totalFiles As Integer:  totalFiles = 0
+    Dim filesParsed As String:  filesParsed = ""
+    Dim prosAdded As String:    prosAdded = ""
+    
+    For i = LBound(fileChoices) To UBound(fileChoices) 'parse each file in fileChoices
+    
+        Dim fileName As String: fileName = fileNames(fileChoices(i))
+        Dim filepath As String: filepath = "C:\Users\" & Environ("username") & "\Desktop\" & fileName
+        
+        If readTextFileAsString(filepath) = "" Then
+            Call prompt_alert(filepath & " is an empty file, import canceled!", procTitle)
+            End
+        End If
+        Dim newData As Variant:      newData = parse2dArrFromCsv(filepath, """,""")
+
+        Dim n As Integer: n = SUB_ASN_CSV_ROW_FIRST
+        While n <= UBound(newData, 1)
+        
+            Dim newPro As String: newPro = newData(n, SUB_ASN_CSV_COL_PRONUM)
+            
+            Dim matchFound As Boolean: matchFound = False
+            r = WS_MANIFEST_FIRST_ROW
+            While r <= UBound(manifestData, 1) And matchFound = False 'loop through manifest
+
+                If CStr(manifestData(r, col.re(COLRE_ARN))) <> "" And _
+                   CStr(manifestData(r, col.re(COLRE_ARN))) = CStr(newData(n, SUB_ASN_CSV_COL_ARN)) Then 'find matches and paste
+
+                    ws.Cells(r, col.re(COLRE_ASN_ID)) = newPro 'update manifest
+                    
+                    Dim s As Integer: s = r 'update archive
+
+                    While manifestData(s, col.re(COLRE_SKU)) <> "" And _
+                          (manifestData(s, col.re(COLRE_ARN)) = "" Or _
+                           manifestData(s, col.re(COLRE_ARN)) = manifestData(r, col.re(COLRE_ARN)))
+
+                        Dim currArn As String:     currArn = manifestData(r, col.re(COLRE_ARN))
+                        Dim currPo As String:      currPo = manifestData(s, col.re(COLRE_PO))
+                        Dim currSku As String:     currSku = manifestData(s, col.re(COLRE_SKU))
+                        Dim currOrderDate As Date: currOrderDate = CDate(manifestData(s, col.re(COLRE_ORDER_DATE)))
+                        Dim currShipDate As Date:  currShipDate = CDate(manifestData(r, col.re(COLRE_ACTUAL_SHIP_DATE)))
+
+                        Call archive.updateSingleOrder(currPo, currSku, currOrderDate, COLRE_ASN_ID, newPro)
+                        Call archive.updateSingleOrder(currPo, currSku, currOrderDate, COLRE_ACTUAL_SHIP_DATE, currShipDate)
+                        
+                        If newPro <> "" Then
+                            Call archive.updateSingleOrder(currPo, currSku, currOrderDate, COLRE_STATUS, "picked up")
+                        End If
+                        
+                        totalOrders = totalOrders + 1
+                        prosAdded = prosAdded & newPro & " - " & currArn & " - " & currPo & " - " & currSku & endl(1)
+                        s = s + 1
+                    Wend
+                    
+                End If
+                
+                r = r + 1
+            Wend
+            
+            n = n + 1
+        Wend
+
+       totalFiles = totalFiles + 1
+       filesParsed = filesParsed & fileName & endl(1)
+    Next i
+
+    Dim finalMsg As String: finalMsg = "" 'exit msg for user
+    finalMsg = finalMsg & totalFiles & " files parsed:" & endl(1)
+    finalMsg = finalMsg & filesParsed & endl(1)
+    finalMsg = finalMsg & totalOrders & " total orders updated in Manifest and Archive:" & endl(1)
+    finalMsg = finalMsg & prosAdded & endl(1)
+    Call prompt_alert(finalMsg, "PRO Number Import Completed")
+End Sub
+
+
+''''''''''''''''''''
+' 3.7 pickUp_ba_submitInvoices
+''''''''''''''''''''
+Sub pickUp_ba_submitInvoices()
+    Dim procTitle As String: procTitle = "pickUp_ba_submitInvoices"
+    
+    Dim activeSheetName As String:        activeSheetName = ActiveWorkbook.ActiveSheet.name
+    Dim sel As seleniumBrowserAutomation: Set sel = New seleniumBrowserAutomation: Call sel.constructor
+    Dim code As String:                   code = sel.submitInvoices(activeSheetName)
+    Dim path As String:                   path = "C:\Users\oscar\Desktop\submitInvoices.py"
+    
+    Call writeToTextFile(path, code, True, True)
+
+    prompt_alert ("Run the newly created file to Submit the Invoice in VC." & endl(2) & "Located at: " & path)
+End Sub
+''''''''''''''''''''
+' 3.7B pickUp_importSubdInvoices
+''''''''''''''''''''
+Sub pickUp_importSubdInvoices()
+    Dim procTitle As String: procTitle = "pickUp_importSubdInvoices"
+
+    Dim i, r As Integer 'reserved for loops
+    Dim ws As Worksheet:  Set ws = ActiveWorkbook.ActiveSheet
+    Dim wsName As String: wsName = ws.name
+    
+    'get list of valid csv files
+    Dim downloadsPath As String:    downloadsPath = "C:\Users\" & Environ("username") & "\Desktop"
+    Dim extensionsToList As String: extensionsToList = "csv"
+    
+    Dim fileNames As Variant:       fileNames = listOfFileNamesInPath(downloadsPath, extensionsToList, "", SUBMITTED_INVS_CSV_LEFT)
+    Call endIfNotInit(fileNames, "No valid CSV files found on the Desktop. Import Cancelled.", procTitle)  'quit if no files found
+    Call swap(fileNames)
+    
+    'prompt user for fileChoices
+    Dim fileList As String: fileList = ""
+    For i = LBound(fileNames) To UBound(fileNames)
+        fileList = fileList & "Enter " & i & " to choose: " & fileNames(i) & endl(1)
+    Next i
+    
+    Dim title As String:         title = "Choose file(s) (single or comma-seperated list)"
+    Dim delimeter As String:     delimeter = ","
+    Dim limitToRange As Boolean: limitToRange = True
+    
+    Dim fileChoices As Variant:  fileChoices = prompt_inputSplitList_int(fileList, title, delimeter, limitToRange, LBound(fileNames), UBound(fileNames))
+    
+    'loop through each fileChoices and add to manifest and archive
+    Dim archive As archive: Set archive = New archive: Call archive.constructor
+    
+    Dim manifestData As Variant:       manifestData = getValues(wsName, 1, 1, 0, 0)
+    Dim manifestHeaderRow As Variant:  manifestHeaderRow = isoRow_from_2dArr(manifestData, WS_MANIFEST_HEADER_ROW, False)
+    Dim col As col: Set col = New col: Call col.constructor(manifestHeaderRow)
+    
+    Dim totalOrders As Integer: totalOrders = 0
+    Dim totalFiles As Integer:  totalFiles = 0
+    Dim filesParsed As String:  filesParsed = ""
+    Dim invssAdded As String:   invssAdded = ""
+    
+    For i = LBound(fileChoices) To UBound(fileChoices) 'parse each file in fileChoices
+    
+        Dim fileName As String: fileName = fileNames(fileChoices(i))
+        Dim filepath As String: filepath = "C:\Users\" & Environ("username") & "\Desktop\" & fileName
+
+        Dim newData As Variant:      newData = parse2dArrFromCsv(filepath, """,""")
+
+        Dim n As Integer: n = SUB_INV_CSV_ROW_FIRST
+        While n <= UBound(newData, 1)
+            
+            Dim matchFound As Boolean: matchFound = False
+            r = WS_MANIFEST_FIRST_ROW
+            While r <= UBound(manifestData, 1) And matchFound = False 'loop through manifest
+
+                If CStr(manifestData(r, col.re(COLRE_ARN))) <> "" And _
+                   CStr(manifestData(r, col.re(COLRE_ARN))) = CStr(newData(n, SUB_INV_CSV_COL_ARN)) Then 'find matches and paste
+
+                    ws.Cells(r, col.re(COLRE_INVOICE_SUBMITTED)) = newData(n, SUB_INV_CSV_COL_INVSUB) 'update manifest
+                    
+                    Dim s As Integer: s = r 'update archive
+
+                    While manifestData(s, col.re(COLRE_SKU)) <> "" And _
+                          (manifestData(s, col.re(COLRE_ARN)) = "" Or _
+                           manifestData(s, col.re(COLRE_ARN)) = manifestData(r, col.re(COLRE_ARN)))
+
+                        Dim currArn As String:     currArn = manifestData(s, col.re(COLRE_ARN))
+                        Dim currPo As String:      currPo = manifestData(s, col.re(COLRE_PO))
+                        Dim currSku As String:     currSku = manifestData(s, col.re(COLRE_SKU))
+                        Dim currOrderDate As Date: currOrderDate = CDate(manifestData(s, col.re(COLRE_ORDER_DATE)))
+
+                        Call archive.updateSingleOrder(currPo, currSku, currOrderDate, COLRE_INVOICE_SUBMITTED, "yes")
+                        'Call archive.updateSingleOrder(currPo, currSku, currOrderDate, COLRE_STATUS, "picked up")
+                        
+                        totalOrders = totalOrders + 1
+                        invssAdded = invssAdded & "yes" & " - " & currArn & " - " & currPo & " - " & currSku & endl(1)
+                        s = s + 1
+                    Wend
+                    
+                End If
+                
+                r = r + 1
+            Wend
+            
+            n = n + 1
+        Wend
+
+       totalFiles = totalFiles + 1
+       filesParsed = filesParsed & fileName & endl(1)
+    Next i
+
+    Dim finalMsg As String: finalMsg = "" 'exit msg for user
+    finalMsg = finalMsg & totalFiles & " files parsed:" & endl(1)
+    finalMsg = finalMsg & filesParsed & endl(1)
+    finalMsg = finalMsg & totalOrders & " total orders updated in Manifest and Archive:" & endl(1)
+    finalMsg = finalMsg & invssAdded & endl(1)
+    Call prompt_alert(finalMsg, "Submitted-Invoices Import Completed")
+End Sub
+
+
+''''''''''''''''''''
+' 3.8 pickUp_emailEstesConfirmation
+''''''''''''''''''''
+Sub pickUp_emailEstesConfirmation()
+    Dim procTitle As String: procTitle = "pickUp_emailEstesConfirmation"
+
+    Dim ws As Worksheet: Set ws = ActiveSheet 'manifest
+    Dim wsName As String: wsName = ws.name
+    
+    Dim goodbyeMsg As String: goodbyeMsg = "Confirmation Emails Sent to Estes:" & endl(2)
+    Dim emailSentCounter As Integer: emailSentCounter = 0
+    
+    Dim shipments As Variant: shipments = getShipmentsFromManifest(wsName, True, False, "scac", "EXLA", "=")
+    Call endIfNotInit(shipments, "No Estes shipments in this manifest. Macro canceled.", procTitle)
+    
+    'get emails in rr from outlook
+    Dim bigFolderName As String: bigFolderName = getMacroParameter(procTitle, "Outlook Big Folder", False)
+    Dim folderName As String:    folderName = getMacroParameter(procTitle, "Outlook RR Folder", False)
+    Dim oldFolderName As String: oldFolderName = getMacroParameter(procTitle, "Outlook RR Old Folder", False)
+    
+    Dim bodies As Variant: bodies = getEmailFieldsByFolder(bigFolderName, folderName, "body") ', oldFolderName)
+    Call endIfNotInit(bodies, "No Estes emails to respond to. Macro canceled.", procTitle)
+
+    Dim outlook As outlook.Application: Set outlook = New outlook.Application
+    Dim ns As outlook.Namespace:        Set ns = outlook.GetNamespace("MAPI")
+
+    Dim bigMAPI As outlook.MAPIFolder: Set bigMAPI = ns.Folders(bigFolderName)
+    Dim fMAPI As outlook.MAPIFolder:   Set fMAPI = bigMAPI.Folders(folderName)
+
+    Dim i As Long
+    For i = fMAPI.Items.Count To 1 Step -1 'Loop through all the emails in the folder
+
+        Dim mail As outlook.MailItem: Set mail = fMAPI.Items(i)
+        
+        If TypeOf mail Is MailItem Then
+
+            Dim bodyArnRaw As String: bodyArnRaw = regexMatch("/ARN:.*[0-9]+/i", mail.body)
+            Dim bodyArn As String:    bodyArn = regexMatch("/[0-9]+/", bodyArnRaw)
+        
+            Dim bodyPoRaw As String: bodyPoRaw = regexMatch("/PO:.*[A-z0-9]+/", mail.body)
+            Dim bodyPo As String:    bodyPo = regexMatch("/[A-z0-9]+/", Right(bodyPoRaw, Len(bodyPoRaw) - 3))
+        
+            Dim s As Integer: s = LBound(shipments)
+            While s <= UBound(shipments) 'for each body
+        
+                If bodyArn = CStr(shipments(s).arnNum) Then 'if match
+            
+                    Dim msgSubject As String: msgSubject = "Shipment is Ready for Pick-Up (ARN: " & bodyArn & ") (" & CStr(shipments(s).shipDate) & ")"
+                
+                    Dim msgBody As String: msgBody = ""
+                    msgBody = msgBody & "Hello," & endl(1)
+                    msgBody = msgBody & "I can confirm that the info in your email is correct." & endl(1)
+                    msgBody = msgBody & "The following shipments are ready for pick-up:" & endl(1)
+                    msgBody = msgBody & endl(1)
+                    msgBody = msgBody & "ARN: " & bodyArn & endl(1)
+                    msgBody = msgBody & "PO: " & bodyPo & endl(1)
+                    msgBody = msgBody & endl(1)
+                    msgBody = msgBody & "The best time for pick-up is on " & CStr(shipments(s).shipDate) & " (from 10am - 1pm and 2pm - 5pm)." & endl(1)
+                    msgBody = msgBody & endl(1)
+                    msgBody = msgBody & "Thank you," & endl(1)
+                    msgBody = msgBody & "Express Water" & endl(1)
+
+                    Dim olReply As MailItem: Set olReply = mail.Reply
+
+                    olReply.subject = msgSubject
+                    olReply.body = msgBody
+                    olReply.Send
+            
+                    goodbyeMsg = goodbyeMsg & bodyArn & " " & bodyPo & endl(1)
+                    emailSentCounter = emailSentCounter + 1
+            
+                    If oldFolderName <> "" Then
+                        Dim moveFolder As outlook.MAPIFolder: Set moveFolder = bigMAPI.Folders(oldFolderName)
+                        Call mail.Move(moveFolder)
+                    End If
+                End If
+            
+                s = s + 1
+            Wend
+        End If
+    Next i
+            
+    Set fMAPI = Nothing
+    Set bigMAPI = Nothing
+    
+    goodbyeMsg = "(" & emailSentCounter & ") " & goodbyeMsg
+    Call prompt_alert(goodbyeMsg, procTitle) 'goodbye msg
+End Sub
+
+
+
