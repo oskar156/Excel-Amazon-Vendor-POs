@@ -1,0 +1,118 @@
+'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Module: strings
+
+'--- NEWLINE
+'Function endl(Optional howMany As Integer = 1) As String
+
+'--- SPLIT
+'Function SplitBase1(ByVal strStringToSplit As String, strDelim As String) As Variant()
+    '-FROM https://www.mrexcel.com/board/threads/split-for-option-base-1.461134/
+    
+'--- REMOVE
+'Function removeDuplicateDoubleQuotes(str As String) As String
+
+'--- WHITESPACE
+'Function trimString(str As String) As String
+'Function isWhiteSpace(str As String) As Boolean
+
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+'--- OPTIONS
+Option Explicit
+Option Base 1
+
+
+'----------------------------------------------------
+'--- NEWLINE
+'----------------------------------------------------
+Function endl(Optional howMany As Integer = 1) As String
+    If howMany < 0 Then howMany = 0
+    
+    Dim newLines As String: newLines = ""
+    Dim n As Integer: n = 0
+    
+    While n < howMany
+        newLines = newLines & vbNewLine
+        n = n + 1
+    Wend
+    
+    endl = newLines
+End Function
+
+
+'----------------------------------------------------
+'--- SPLIT
+'----------------------------------------------------
+Function SplitBase1(ByVal strStringToSplit As String, strDelim As String, Optional shouldTrim As Boolean = False) As Variant()
+
+    Dim straBase0() As String
+    straBase0 = split(strStringToSplit, strDelim)
+    Dim iUbBase0 As Integer
+    iUbBase0 = UBound(straBase0)
+    ReDim straBase1(1 To iUbBase0 + 1) As Variant
+    
+    Dim i As Integer
+    For i = 0 To iUbBase0
+
+        straBase1(i + 1) = straBase0(i)
+        
+        If shouldTrim = True Then
+            straBase1(i + 1) = trim(straBase1(i + 1))
+        End If
+        
+    Next i
+ 
+    SplitBase1 = straBase1
+End Function
+
+
+'----------------------------------------------------
+'--- WHITESPACE
+'----------------------------------------------------
+Function trimString(str As String) As String
+
+    Dim a As Integer: a = 1
+    Dim b As Integer: b = Len(str)
+    
+    If Len(str) > 0 Then
+        While a <= Len(str) And _
+              isWhiteSpace(Right(Left(str, a), 1)) = True
+            a = a + 1
+        Wend
+    
+        While b >= a And _
+              isWhiteSpace(Right(Left(str, b), 1)) = True
+            b = b - 1
+       Wend
+    End If
+    str = Mid(str, a, b - (a - 1))
+    trimString = str
+End Function
+
+Function isWhiteSpace(str As String) As Boolean
+
+    Dim result As Boolean: result = False
+    
+    If Len(str) >= 1 Then
+    
+        Dim firstChar As String: firstChar = Left(str, 1)
+        
+        If firstChar = vbNewLine Or _
+           firstChar = vbCr Or _
+           firstChar = vbCrLf Or _
+           firstChar = vbLf Or _
+           firstChar = vbTab Or _
+           firstChar = vbFormFeed Or _
+           firstChar = vbVerticalTab Or _
+           firstChar = " " Then
+           
+            result = True
+            
+        End If
+    End If
+
+    isWhiteSpace = result
+End Function
+
+
+
