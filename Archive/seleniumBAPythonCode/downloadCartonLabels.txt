@@ -1,0 +1,139 @@
+### LOGIN TO AMAZON VENDOR CENTRAL ###
+loginTo_amazonVendorCentral()
+
+### DL CARTON LABELS ###
+accounts = ['usa', 'can']
+#accounts = ['amzn1.vg.d.AAH2ZZILO3ZSFBAENTAL4YL4MOXA', 'amzn1.vg.d.ADTNYEWRXNYSYDNH4FZ5OGKITPXA']
+accountCountries = ['usa', 'can']
+
+a = 0
+while a < len(accounts):
+
+  switchAccount_amazonVendorCentral(accounts[a])
+
+  shipmentCounter = 0
+
+  b = 0
+  while b < len(arn):
+
+    if shipToCountry[b] == accountCountries[a]:
+
+      place = str(a) + " " + accountCountries[a] + " " + str(b) + " " + str(arn[b])
+      print(place)
+
+      shipmentCounter = shipmentCounter  + 1
+
+      shipmentLink = 'https://vendorcentral.amazon.com/kt/vendor/members/afi-shipment-mgr/shipmentdetail?rr=' + str(arn[b])
+      get(driver, shipmentLink, secsAfter = 2)
+
+
+      if i(driver, 'XPATH', "//kat-button[@label='Prepare carton labels']/button", action = 'check if loaded', attempts = 1, secsBefore = 0.3) == True:
+
+        prepareLink = 'https://vendorcentral.amazon.com/kt/vendor/members/afi-shipment-mgr/labelmapping?arn=' + str(arn[b])
+        get(driver, prepareLink, secsAfter = 2)
+
+        i(driver, 'XPATH', "//kat-button[@label='Continue to step 2']", action = 'click', attempts = 5)
+        i(driver, 'XPATH', "//kat-radiobutton[@label='Case pack (single SKU cartons)']/div", action = 'click', attempts = 5)
+
+        #fill out carton info in the rows
+        html = driver.page_source
+
+        rowElementMatches = regexLookup(html, "row-[0-9]+", True)
+        lastRowMatch = rowElementMatches[len(rowElementMatches) - 1]
+        rowNumberMatches = regexLookup(lastRowMatch, "[0-9]+", True)
+
+        numberOfRows = int(rowNumberMatches[0])
+        row = 0
+        asinElement = i(driver, 'TEXT', "ASIN:", "get text")
+
+        while row <= numberOfRows:
+          
+          rowAsin = ""
+          if type(asinElement) == list:
+            rowAsin = asinElement[row][6:]
+          else:
+            rowAsin = asinElement[6:]
+
+          #packedElement = "0 / 1"
+          #packedElement = i(driver, 'XPATH', "//div[@id='row-" + str(row) + "']/div", "get text")
+
+          #packedText = packedElement[0]
+          #packedSplit = packedText.split(" / ")
+
+          #rowQuantity = int(packedSplit[1])
+          rowUnitsPerCarton = 1
+          #rowCartons = rowQuantity
+
+          n = 0
+          keepLooking = True
+          while n < len(asin[s]) and keepLooking == True:
+
+            if rowAsin == asin[s][n]:
+  
+              rowUnitsPerCarton = int(unitsPerCarton[s][n])
+              rowCartons = int(cartons[s][n])
+              rowQuantity = int(quantity[s][n])
+
+              if rowQuantity < rowUnitsPerCarton: #if rowCartons is less than then unitsPerCarton...
+                rowUnitsPerCarton = rowCartons    #then set unitsPerCarton to rowCartons
+                rowCartons = 1
+              elif rowQuantity != rowCartons * rowUnitsPerCarton:
+                rowUnitsPerCarton = rowQuantity 
+                rowCartons = 1
+
+              keepLooking = False
+            n = n + 1
+
+          try:
+            i(driver, 'XPATH', "//div[@id='row-0']/div/div/kat-input/input", secsAfter = 0.1)[0].clear()
+            i(driver, 'XPATH', "//div[@id='row-0']/div/div/kat-input/input", secsAfter = 0.1)[0].send_keys(rowUnitsPerCarton)
+            i(driver, 'XPATH', "//div[@id='row-0']/div/div/kat-input/input", secsAfter = 0.1)[1].clear()
+            i(driver, 'XPATH', "//div[@id='row-0']/div/div/kat-input/input", secsAfter = 0.1)[1].send_keys(rowCartons)
+
+            i(driver, 'XPATH', "//div[@id='row-0']/div/kat-button[@label = 'Confirm']/button", secsAfter = 0.1).click() #confirm 
+
+            try:
+              i(driver, 'XPATH', "//div[@id='row-0']/div/kat-button[@label = 'Confirm']/button", secsAfter = 0.1, attempts = 1).click() #confirm 
+            except:
+              pass
+
+            time.sleep(0.5)
+            row = row + 1
+
+            try:
+              i(driver, 'XPATH', "//kat-button[@label='Confirm and print labels']/button", action = 'click', secsBefore = 2)
+            except:
+              i(driver, 'XPATH', "//div[@id='hmd2f-exit']", action = 'click', secsAfter = 0.5)
+              i(driver, 'XPATH', "//kat-button[@label='Confirm and print labels']/button", action = 'click', secsBefore = 2)
+          except:
+            print("UNABLE TO PRINT, DO IT MANUALLY PLS")
+      else:
+
+        i(driver, 'XPATH', "//button[@data-action='print']", action = 'click', attempts = 10) #click print button
+
+      i(driver, 'XPATH', "//kat-button[@label='Print carton labels']", action = 'click', attempts = 10)
+
+      driver.switch_to.window(driver.window_handles[1])
+      time.sleep(0.3)
+
+      i(driver, 'XPATH', "//kat-statusindicator[@id='print-label-success'][@style='display: block;']", attempts = 20, secsAfter = 1) #wait until loaded
+
+      driver.close()
+      time.sleep(0.3)
+
+      driver.switch_to.window(driver.window_handles[0])
+      time.sleep(0.3)
+
+      try:
+        newFileName = r'C:\Users\oscar\Downloads\Carton Labels - ' + str(b) + ' - ' + str(arn[b]) + '.pdf'
+        list_of_files = glob.glob(r'C:\Users\oscar\Downloads\*.pdf') #get all files in Downloads folder that are pdfs
+        latest_file = max(list_of_files, key = os.path.getctime)     #get newest file in path
+        os.rename(latest_file, newFileName)                          #rename DL'd file (so it prints in order)
+      except:
+        print(place + ": unable to rename")
+
+    b = b + 1
+
+  a = a + 1
+
+driver.quit()
