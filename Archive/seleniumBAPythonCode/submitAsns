@@ -1,0 +1,187 @@
+### LOGIN TO AMAZON VENDOR CENTRAL ###
+loginTo_amazonVendorCentral()
+
+accounts = ['usa', 'can']
+#accounts = ['amzn1.vg.d.AAH2ZZILO3ZSFBAENTAL4YL4MOXA', 'amzn1.vg.d.ADTNYEWRXNYSYDNH4FZ5OGKITPXA']
+accountCountries = ['usa', 'can']
+
+### SUBMIT ASNS ###
+a = 0
+while a < len(accounts):
+
+  switchAccount_amazonVendorCentral(accounts[a])
+
+  s = 0
+  while s < len(shipToLocation):
+
+    if shipToCountry[s] == accountCountries[a]:
+
+      place = str(a) + "." + str(s) + ": " + shipToLocation[s] + " " + po[s][0]
+      print(place)
+
+      get(driver, "https://vendorcentral.amazon.com/kt/vendor/members/afi-shipment-mgr/shipmentdetail?rr=" + str(arn[s]), secsAfter = 3)
+
+      #CHECK IF ASN IS ALREADY SUB
+      skip = False
+      try:
+        driver.find_element(By.XPATH, "//kat-button[@label='Submit ASN']").click()
+      except:
+        skip = True
+        print("skipped because it's already submitted.")
+
+      if skip == False:
+
+        i(driver, 'XPATH', "//kat-button[@label='Continue to step 2']", action = 'click', secsAfter = 0.5)
+
+        try:
+          driver.find_element(By.XPATH, "//kat-button[@label='Continue to step 3']").click()
+          time.sleep(0.5)
+        except:
+          i(driver, 'XPATH', "//kat-button[@label='Continue to step 2']", action = 'click', secsAfter = 0.5)
+          i(driver, 'XPATH', "//kat-button[@label='Continue to step 3']", action = 'click', secsAfter = 0.5)
+
+        ####################################################################
+        #
+        #   START: SMALL PARCEL DETOUR
+        #
+
+        if scac[s] == "EMSY" or scac[s] == "UPSN": #IF ITS SMALL PARCEL
+
+          labelCartonMappingRows = []
+
+          if accountCountries[a] == "usa":
+            labelCartonMappingRows = i(driver, 'XPATH', "//div[@class='label-carton-mapping']/div/div/div[@role='table']/div[@offset='250px']/div[@role='row']", secsBefore = 1)
+          elif accountCountries[a] == "can":
+            labelCartonMappingRows = i(driver, 'XPATH', "//div[@class='label-carton-mapping']/div/div/div[@role='table']/div[@offset='250px']/div[@role='row']", secsBefore = 1)
+
+          labelCartonMappingRowInt = 1
+          try:
+            if len(labelCartonMappingRows) < 1:
+              labelCartonMappingRowInt = 1
+            else:
+              labelCartonMappingRowInt = len(labelCartonMappingRows)
+          except:
+            pass
+
+          checkboxesToSkipPerRow = 1
+          smallParcelPROs = ""
+
+          r = 0
+          while r < labelCartonMappingRowInt:
+            
+            checkboxElements = i(driver, 'XPATH', "//kat-checkbox/div[@role='checkbox']")
+            trackingElementsText = i(driver, 'XPATH', "//kat-checkbox/div[@class='text-container']/kat-label", action = 'get attribute', attribute = 'text')
+
+            cartons = i(driver, 'XPATH', "//div[@role='row'][@id = 'row-" + str(r) + "']/div/div/kat-label/label/span[@class='text']", action = 'get text', secsBefore = 1)
+
+            cartonsSplit = cartons.split(" - ")
+            lowCarton = int(cartonsSplit[0])
+            highCarton = int(cartonsSplit[len(cartonsSplit) - 1])
+
+            i(driver, 'XPATH', "//div[@role='row'][@id = 'row-" + str(r) + "']/div/kat-button[@label='Enter Small Parcel tracking IDs']", action = 'click', secsAfter = 0.3)
+
+            c = checkboxesToSkipPerRow + (int((len(checkboxElements) / 2)) * r)
+            lastCheckboxIndex = c + (highCarton - lowCarton)
+
+            while c <= lastCheckboxIndex:
+
+                checkboxElements[c].click()
+                time.sleep(0.1)
+
+                smallParcelPROs = smallParcelPROs + trackingElementsText[c] + ","
+                time.sleep(0.1)
+
+                c = c + 1
+
+            submitButtons = i(driver, 'XPATH', "//kat-modal-footer/kat-button[@label='Submit']")
+            try:
+              submitButtons.click()
+            except:
+              submitButtons[r].click()
+
+            smallParcelPROs = smallParcelPROs[:-1]
+            subProsFile.write('"' + arn[s] + '","' + str(smallParcelPROs ) + '"' + "\n")
+
+            r = r + 1
+
+        #
+        #   END:   SMALL PARCEL DETOUR
+        #
+        ####################################################################
+
+        i(driver, 'XPATH', "//kat-button[@label='Continue to step 4']", action = 'click', secsAfter = 0.5)
+  
+        #ADDING THE DATES
+        currentShipDate = ""
+        currentEstDeliveryDate = ""
+
+        startDate = datetime.datetime.strptime(actualShipDate[s], "%m/%d/%Y")
+        endDate = startDate + datetime.timedelta(days = 7)
+
+        if accountCountries[a] == "usa":
+          currentShipDate = actualShipDate[s]
+          currentEstDeliveryDate = endDate.strftime("%m/%d/%Y")
+
+          i(driver, 'XPATH', "//input [@placeholder='MM/DD/YYYY']", secsAfter = 0.2)[0].clear()
+          i(driver, 'XPATH', "//input [@placeholder='MM/DD/YYYY']", secsAfter = 0.2)[0].send_keys(currentShipDate)
+
+          i(driver, 'XPATH', "//input [@placeholder='MM/DD/YYYY']", secsAfter = 0.2)[1].clear()
+          i(driver, 'XPATH', "//input [@placeholder='MM/DD/YYYY']", secsAfter = 0.2)[1].send_keys(currentEstDeliveryDate)
+
+
+        elif accountCountries[a] == "can":
+          currentShipDate = actualShipDateCan[s]
+          currentEstDeliveryDate = endDate.strftime("%Y-%m-%d")
+
+          i(driver, 'XPATH', "//input [@placeholder='MM/DD/YYYY']", secsAfter = 0.2)[0].clear()
+          i(driver, 'XPATH', "//input [@placeholder='MM/DD/YYYY']", secsAfter = 0.2)[0].send_keys(currentShipDate)
+
+          i(driver, 'XPATH', "//input [@placeholder='MM/DD/YYYY']", secsAfter = 0.2)[1].clear()
+          i(driver, 'XPATH', "//input [@placeholder='MM/DD/YYYY']", secsAfter = 0.2)[1].send_keys(currentEstDeliveryDate)
+
+        i(driver, 'XPATH', "//kat-input[@id='packing-detail-pallet-count']/input", action = 'clear', attempts = 5, secsAfter = 0.2) #Total pallets
+        i(driver, 'XPATH', "//kat-input[@id='packing-detail-pallet-count']/input", action = 'clear and send_keys', keysToSend = palletTotal[s], attempts = 5, secsAfter = 0.2) #Total pallets
+
+        i(driver, 'ID', "packing-detail-pallet-type", action = 'click', attempts = 5, secsAfter = 0.5) #Pallet Type
+        i(driver, 'ID', "unstacked1", action = 'click', attempts = 5, secsAfter = 0.1) #select Unstackable
+
+        #ADDING THE PRO
+        if scac[s] == "AMZX" or scac[s] == "AZNG": #IF ITS LTL and AMAZON
+
+          amzProNum = i(driver, 'XPATH', "//kat-input[@id='shipment-pro-input']/input", action = 'get attribute', attribute = "value")
+          subProsFile.write('"' + arn[s] + '","' + str(amzProNum) + '"' + "\n")
+          print(place + ' AMZ PRO: ' + str(amzProNum))
+
+        elif scac[s] != "EMSY" and scac[s] != "UPSN" and scac[s] != "AMZX" and scac[s] != "AZNG": #IF ITS LTL and not AMAZON
+
+          ltlProNum = proNum[s]
+          i(driver, 'XPATH', "//kat-input[@id='shipment-pro-input']/input", action = 'clear and send_keys', keysToSend = ltlProNum)
+          subProsFile.write('"' + arn[s] + '","' + str(ltlProNum) + '"' + "\n")
+          print(place + ' PRO: ' + str(ltlProNum))
+
+        try:
+          #SCROLL TO BOTTOM
+          lenOfPage = driver.execute_script("window.scrollTo(0, document.body.scrollHeight);var lenOfPage=document.body.scrollHeight;return lenOfPage;")
+          match=False
+
+          while(match==False):
+            lastCount = lenOfPage
+            time.sleep(0.3)
+            lenOfPage = driver.execute_script("window.scrollTo(0, document.body.scrollHeight);var lenOfPage=document.body.scrollHeight;return lenOfPage;")
+            if lastCount==lenOfPage:
+              match=True
+
+          #CLICK BUTTON
+          i(driver, 'XPATH', "//kat-button[@label='Confirm and submit shipment']", action = 'click', secsBefore = 0.1, secsAfter = 0.1)
+
+        except:
+          subProsFile.write('"' + arn[s] + '","' + 'SUBMISSION FAILURE, skipped for now, please re-submit it manually' + '"' + "\n")
+          print(place + ' AMZ PRO: ' + str(amzProNum))
+
+        time.sleep(2)
+
+
+    s = s + 1
+  a = a + 1
+
+driver.quit()
