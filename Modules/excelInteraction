@@ -1,0 +1,828 @@
+'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Module: excelInteraction
+
+'--- GET VALUES
+'Function getValues  (worksheetName As String, startRow As Integer, startCol As Integer, rows As Integer, cols As Integer) As Variant !!! NEED TO TEST
+'Function getValuesA1(worksheetName As String, rangeA1 As String) As Variant !!! NEED TO TEST
+
+'--- SET VALUES
+'Sub      setValue   (worksheetName As String, data As Variant, startRow As Integer, startCol As Integer)
+'Sub      setValues  (worksheetName As String, data As Variant, startRow As Integer, startCol As Integer) !!! NEED TO TEST
+'Sub      setValuesA1(worksheetName As String, data As Variant, rangeA1 As String) !!! NEED TO TEST
+
+'--- MACROS
+'Function getMacroParameter(procTitle As String, parameterName As String) As Variant
+
+'--- ORDERS
+'Sub pasteOrder (wsName As String, order As order,    rowIndex As Integer,      Optional headerRowIndex As Integer = 1)
+'Sub pasteOrders(wsName As String, orders As Variant, startRowIndex As Integer, Optional headerRowIndex As Integer = 1)
+
+'--- SORT SHEET
+'Sub sortColumnButton()
+
+'--- SHEETS
+'Sub      deleteSheet(wsName As String, Optional displayWarning As Boolean = False)
+'Function copySheet(wsNameOriginal As String, wsNameCopy As String, Optional wsNameAddAfter As String = "") As String
+'Function wsExists(wsName As String, Optional wb As Workbook = ActiveWorkbook) As Boolean
+
+'--- SHIPMENTS
+'Function getShipmentsFromManifest(wsName As String, arnsPresent As Boolean, excludeArns As Boolean, _
+                                   Optional ltlOrSp As String = "both", Optional shipToCountry As String = "", Optional scac As String = "") As Variant
+                                   
+'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+'--- OPTIONS
+Option Explicit
+Option Base 1
+
+
+'----------------------------------------------------
+'--- GET VALUES
+'----------------------------------------------------
+Function getValues(worksheetName As String, startRow As Integer, startCol As Integer, rows As Integer, cols As Integer) As Variant
+    Dim wb As Workbook:  Set wb = ActiveWorkbook
+    Dim ws As Worksheet: Set ws = wb.Sheets(worksheetName)
+
+    If rows <= 0 And cols > 0 Then rows = (ws.UsedRange.rows.Count - startRow) + 1
+    If rows > 0 And cols <= 0 Then cols = (ws.UsedRange.columns.Count - startCol) + 1
+    If rows <= 0 And cols <= 0 Then
+        rows = (ws.UsedRange.rows.Count - startRow) + 1
+        cols = (ws.UsedRange.columns.Count - startCol) + 1
+    End If
+    
+    If rows < 1 Then rows = 1
+    If cols < 1 Then cols = 1
+
+    Dim data As Variant: data = ws.Cells(startRow, startCol).Resize(rows, cols)
+    getValues = data
+End Function
+
+Function getValuesA1(worksheetName As String, rangeA1 As String) As Variant
+    Dim wb As Workbook:  Set wb = ActiveWorkbook
+    Dim ws As Worksheet: Set ws = wb.Sheets(worksheetName)
+    Dim data As Variant: data = ws.Range(rangeA1)
+    getValuesA1 = data
+End Function
+
+
+'----------------------------------------------------
+'--- SET VALUES
+'----------------------------------------------------
+Sub setValue(worksheetName As String, data As Variant, startRow As Integer, startCol As Integer)
+    Dim wb As Workbook:  Set wb = ActiveWorkbook
+    Dim ws As Worksheet: Set ws = wb.Sheets(worksheetName)
+
+    ws.Cells(startRow, startCol) = data
+End Sub
+
+Sub setValues(worksheetName As String, data As Variant, startRow As Integer, startCol As Integer)
+    Dim wb As Workbook:  Set wb = ActiveWorkbook
+    Dim ws As Worksheet: Set ws = wb.Sheets(worksheetName)
+    
+    Dim resizeX As Integer: resizeX = (UBound(data, 1) - LBound(data, 1)) + 1
+    Dim resizeY As Integer: resizeY = (UBound(data, 2) - LBound(data, 2)) + 1
+    
+    ws.Cells(startRow, startCol).Resize(resizeX, resizeY) = data
+End Sub
+
+Sub setValuesA1(worksheetName As String, data As Variant, rangeA1 As String)
+    Dim wb As Workbook:  Set wb = ActiveWorkbook
+    Dim ws As Worksheet: Set ws = wb.Sheets(worksheetName)
+    
+    Dim resizeX As Integer: resizeX = (UBound(data, 1) - LBound(data, 1)) + 1
+    Dim resizeY As Integer: resizeY = (UBound(data, 2) - LBound(data, 2)) + 1
+    
+    ws.Range(rangeA1).Resize(resizeX, resizeY) = data
+End Sub
+
+
+'----------------------------------------------------
+'--- MACROS
+'----------------------------------------------------
+Function getMacroParameter(procTitle As String, parameterName As String, Optional shouldSplit As Boolean = False, Optional delimeter As String = ",") As Variant
+
+    Dim data As Variant: data = getValues(WS_NAME_MACROS, 2, 1, 0, 0)
+    
+    Dim x As Integer: x = LBound(data, 1)
+    Dim y As Integer: y = LBound(data, 2)
+
+    While y <= UBound(data, 2) And _
+          data(x, y) <> "Macro Name / Options"
+        y = y + 1
+    Wend
+
+    While x <= UBound(data, 1) And _
+          data(x, y) <> procTitle
+        x = x + 1
+    Wend
+
+    Dim foundIt As Boolean: foundIt = False
+
+    While data(x, y) <> "" And _
+          foundIt = False
+        
+        If data(x, y) = parameterName Then
+            foundIt = True
+        Else
+            x = x + 1
+        End If
+    Wend
+
+    Dim cellContents As String: cellContents = data(x, y + 1)
+    If Left(cellContents, 1) = "'" Then
+        cellContents = Right(cellContents, Len(cellContents) - 1)
+    End If
+
+    Dim value As Variant
+    If foundIt = False Then
+        value = "n/a"
+    ElseIf foundIt = True And shouldSplit = False Then
+        value = cellContents
+    ElseIf foundIt = True And shouldSplit = True And cellContents <> "" Then
+        value = SplitBase1(cellContents, delimeter, True)
+    ElseIf foundIt = True And shouldSplit = True And cellContents = "" Then
+        ReDim value(1)
+        value(1) = ""
+    End If
+    
+    getMacroParameter = value
+End Function
+
+
+'----------------------------------------------------
+'--- ORDERS
+'----------------------------------------------------
+Sub pasteOrder(wsName As String, order As order, rowIndex As Integer, Optional headerRowIndex As Integer = 1)
+    
+    Dim wsData As Variant:    wsData = getValues(wsName, headerRowIndex, 1, 1, 0)
+    Dim headerRow As Variant: headerRow = isoRow_from_2dArr(wsData, 1, False)
+    Dim col As col:           Set col = New col: Call col.constructor(headerRow)
+
+    Dim c As Integer 'c is the column index
+
+    'OG
+    c = col.re(COLRE_PO):                 If c >= 1 Then Call setValue(wsName, order.po, rowIndex, c) 'If c >= 1 Then... ie If column exists in headerRow, Then ...
+    c = col.re(COLRE_VENDOR):             If c >= 1 Then Call setValue(wsName, order.vendor, rowIndex, c)
+    c = col.re(COLRE_SHIPTOLOC):          If c >= 1 Then Call setValue(wsName, order.shipToLoc, rowIndex, c)
+    c = col.re(COLRE_ASIN):               If c >= 1 Then Call setValue(wsName, order.asin, rowIndex, c)
+    c = col.re(COLRE_EXTERNAL_ID):        If c >= 1 Then Call setValue(wsName, order.externalId, rowIndex, c)
+    c = col.re(COLRE_MODEL_NUM):          If c >= 1 Then Call setValue(wsName, order.modelNum, rowIndex, c)
+    c = col.re(COLRE_TITLE):              If c >= 1 Then Call setValue(wsName, order.title, rowIndex, c)
+    c = col.re(COLRE_AVAILABILITY):       If c >= 1 Then Call setValue(wsName, order.availability, rowIndex, c)
+    c = col.re(COLRE_WINDOW_TYPE):        If c >= 1 Then Call setValue(wsName, order.windowType, rowIndex, c)
+    c = col.re(COLRE_WINDOW_START):       If c >= 1 Then Call setValue(wsName, order.windowStart, rowIndex, c)
+    c = col.re(COLRE_WINDOW_END):         If c >= 1 Then Call setValue(wsName, order.windowEnd, rowIndex, c)
+    c = col.re(COLRE_EXPECTED_DATE):      If c >= 1 Then Call setValue(wsName, order.expDate, rowIndex, c)
+    c = col.re(COLRE_QUANTITY_REQUESTED): If c >= 1 Then Call setValue(wsName, order.quantReq, rowIndex, c)
+    c = col.re(COLRE_EXPECTED_QUANT):     If c >= 1 Then Call setValue(wsName, order.quantExp, rowIndex, c)
+    c = col.re(COLRE_UNIT_COST):          If c >= 1 Then Call setValue(wsName, order.unitCost, rowIndex, c)
+
+    'AFTER IMPORT
+    c = col.re(COLRE_ORDER_TYPE):       If c >= 1 Then Call setValue(wsName, order.orderType, rowIndex, c)
+    c = col.re(COLRE_SHIP_FROM_WAREHOUSE): If c >= 1 Then Call setValue(wsName, order.shipFromWarehouse, rowIndex, c)
+    c = col.re(COLRE_SKU):              If c >= 1 Then Call setValue(wsName, order.sku, rowIndex, c)
+    c = col.re(COLRE_PALLETS):          If c >= 1 Then Call setValue(wsName, order.pallets, rowIndex, c)
+    c = col.re(COLRE_UNITS_PER_CARTON): If c >= 1 Then Call setValue(wsName, order.unitsPerCarton, rowIndex, c)
+    c = col.re(COLRE_CARTONS):          If c >= 1 Then Call setValue(wsName, order.cartons, rowIndex, c)
+    c = col.re(COLRE_TOTAL_WEIGHT):     If c >= 1 Then Call setValue(wsName, order.weight, rowIndex, c)
+    c = col.re(COLRE_TOTAL_VOLUME):     If c >= 1 Then Call setValue(wsName, order.volume, rowIndex, c)
+    c = col.re(COLRE_SHIPPING_INFO):    If c >= 1 Then Call setValue(wsName, order.shippingInfo, rowIndex, c)
+    c = col.re(COLRE_TOTAL_COST):       If c >= 1 Then Call setValue(wsName, order.totalCost, rowIndex, c)
+    c = col.re(COLRE_BEST_SHIP_DATE):   If c >= 1 Then Call setValue(wsName, order.bestShipDate, rowIndex, c)
+    c = col.re(COLRE_SHIP_TO_COUNTRY):  If c >= 1 Then Call setValue(wsName, order.shipToCountry, rowIndex, c)
+    c = col.re(COLRE_ORDER_DATE):       If c >= 1 Then Call setValue(wsName, order.orderDate, rowIndex, c)
+    c = col.re(COLRE_STATUS):           If c >= 1 Then Call setValue(wsName, order.status, rowIndex, c)
+    
+    'AFTER ADDED TO SHIPMENT
+    c = col.re(COLRE_ARN):               If c >= 1 Then Call setValue(wsName, orders.arnNum, rowIndex, c)
+    c = col.re(COLRE_SHIPMENT_REF_ID):   If c >= 1 Then Call setValue(wsName, order.shipmentRefId, rowIndex, c)
+    c = col.re(COLRE_INVOICE_ID):        If c >= 1 Then Call setValue(wsName, order.invId, rowIndex, c)
+    c = col.re(COLRE_CARRIER):           If c >= 1 Then Call setValue(wsName, order.carrier, rowIndex, c)
+    c = col.re(COLRE_SCAC):              If c >= 1 Then Call setValue(wsName, order.scac, rowIndex, c)
+    c = col.re(COLRE_ACTUAL_SHIP_DATE)
+    If c >= 1 Then
+        
+        If orders(i).actualShipDate = CDate(0) Then
+            Call setValue(wsName, "", rowIndex, c)
+        Else
+            Call setValue(wsName, orders(i).actualShipDate, rowIndex, c)
+        End If
+    End If
+        
+    c = col.re(COLRE_ASN_ID):            If c >= 1 Then Call setValue(wsName, order.asn, rowIndex, c)
+    c = col.re(COLRE_ASN_SUBMITTED):     If c >= 1 Then Call setValue(wsName, order.asnSub, rowIndex, c)
+    c = col.re(COLRE_INVOICE_SUBMITTED): If c >= 1 Then Call setValue(wsName, order.invSub, rowIndex, c)
+    c = col.re(COLRE_NOTES):             If c >= 1 Then Call setValue(wsName, order.notes, rowIndex, c)
+    
+    c = col.re(COLRE_SCHED_SHIP_DATE):  If c >= 1 Then Call setValue(wsName, order.scheduledShipDate, rowIndex, c)
+    c = col.re(COLRE_SHIPMENT_PALLETS): If c >= 1 Then Call setValue(wsName, order.palletsInShipment, rowIndex, c)
+    
+    c = col.re(COLRE_BO_CAUSE):             If c >= 1 Then Call setValue(wsName, order.boCause, rowIndex, c)
+    c = col.re(COLRE_BO_CORRECTIVE_ACTION): If c >= 1 Then Call setValue(wsName, order.boCorrectiveAction, rowIndex, c)
+    c = col.re(COLRE_OWNER):                If c >= 1 Then Call setValue(wsName, order.owner, rowIndex, c)
+End Sub
+
+Sub pasteOrders(wsName As String, orders As Variant, startRowIndex As Integer, Optional headerRowIndex As Integer = 1)
+
+    Dim ws As Worksheet: Set ws = ActiveWorkbook.Sheets(wsName)
+
+    Dim wsData As Variant:    wsData = getValues(wsName, 1, 1, 0, 0)
+    Dim headerRow As Variant: headerRow = isoRow_from_2dArr(wsData, headerRowIndex, False)
+    Dim col As col:           Set col = New col: Call col.constructor(headerRow)
+
+    Dim c As Integer 'c is the column index
+    Dim r As Integer: r = 0 'row iterator
+    Dim i As Integer 'orders iterator
+
+    Dim colToPaste As Variant
+    ReDim colToPaste(UBound(orders), 1)
+    
+    c = col.re(COLRE_PO)
+    If c >= 1 Then
+        For i = LBound(orders) To UBound(orders)
+            colToPaste(i, 1) = orders(i).po
+        Next i
+        
+        Call setValues(wsName, colToPaste, startRowIndex, c)
+    End If
+
+    c = col.re(COLRE_VENDOR)
+    If c >= 1 Then
+        For i = LBound(orders) To UBound(orders)
+            colToPaste(i, 1) = orders(i).vendor
+        Next i
+        Call setValues(wsName, colToPaste, startRowIndex, c)
+    End If
+
+    c = col.re(COLRE_SHIPTOLOC)
+    If c >= 1 Then
+        For i = LBound(orders) To UBound(orders)
+            colToPaste(i, 1) = orders(i).shipToLoc
+        Next i
+        Call setValues(wsName, colToPaste, startRowIndex, c)
+    End If
+
+    c = col.re(COLRE_ASIN)
+    If c >= 1 Then
+        For i = LBound(orders) To UBound(orders)
+            colToPaste(i, 1) = orders(i).asin
+        Next i
+        Call setValues(wsName, colToPaste, startRowIndex, c)
+    End If
+
+    c = col.re(COLRE_EXTERNAL_ID)
+    If c >= 1 Then
+        For i = LBound(orders) To UBound(orders)
+            colToPaste(i, 1) = orders(i).externalId
+        Next i
+        Call setValues(wsName, colToPaste, startRowIndex, c)
+    End If
+    
+    c = col.re(COLRE_MODEL_NUM)
+    If c >= 1 Then
+        For i = LBound(orders) To UBound(orders)
+            colToPaste(i, 1) = orders(i).modelNum
+        Next i
+        Call setValues(wsName, colToPaste, startRowIndex, c)
+    End If
+
+    c = col.re(COLRE_TITLE)
+    If c >= 1 Then
+        For i = LBound(orders) To UBound(orders)
+            colToPaste(i, 1) = orders(i).title
+        Next i
+        Call setValues(wsName, colToPaste, startRowIndex, c)
+    End If
+
+    c = col.re(COLRE_AVAILABILITY)
+    If c >= 1 Then
+        For i = LBound(orders) To UBound(orders)
+            colToPaste(i, 1) = orders(i).availability
+        Next i
+        Call setValues(wsName, colToPaste, startRowIndex, c)
+    End If
+
+    c = col.re(COLRE_WINDOW_TYPE)
+    If c >= 1 Then
+        For i = LBound(orders) To UBound(orders)
+            colToPaste(i, 1) = orders(i).windowType
+        Next i
+        Call setValues(wsName, colToPaste, startRowIndex, c)
+    End If
+
+    c = col.re(COLRE_WINDOW_START)
+    If c >= 1 Then
+        For i = LBound(orders) To UBound(orders)
+            colToPaste(i, 1) = orders(i).windowStart
+        Next i
+        Call setValues(wsName, colToPaste, startRowIndex, c)
+    End If
+
+    c = col.re(COLRE_WINDOW_END)
+    If c >= 1 Then
+        For i = LBound(orders) To UBound(orders)
+            colToPaste(i, 1) = orders(i).windowEnd
+        Next i
+        Call setValues(wsName, colToPaste, startRowIndex, c)
+    End If
+
+    c = col.re(COLRE_EXPECTED_DATE)
+    If c >= 1 Then
+        For i = LBound(orders) To UBound(orders)
+            colToPaste(i, 1) = orders(i).expDate
+        Next i
+        Call setValues(wsName, colToPaste, startRowIndex, c)
+    End If
+
+    c = col.re(COLRE_QUANTITY_REQUESTED)
+    If c >= 1 Then
+        For i = LBound(orders) To UBound(orders)
+            colToPaste(i, 1) = orders(i).quantReq
+        Next i
+        Call setValues(wsName, colToPaste, startRowIndex, c)
+    End If
+
+    c = col.re(COLRE_EXPECTED_QUANT)
+    If c >= 1 Then
+        For i = LBound(orders) To UBound(orders)
+            colToPaste(i, 1) = orders(i).quantExp
+        Next i
+        Call setValues(wsName, colToPaste, startRowIndex, c)
+    End If
+
+    c = col.re(COLRE_UNIT_COST)
+    If c >= 1 Then
+        For i = LBound(orders) To UBound(orders)
+            colToPaste(i, 1) = orders(i).unitCost
+        Next i
+        Call setValues(wsName, colToPaste, startRowIndex, c)
+    End If
+
+    c = col.re(COLRE_ORDER_TYPE)
+    If c >= 1 Then
+        For i = LBound(orders) To UBound(orders)
+            colToPaste(i, 1) = orders(i).orderType
+        Next i
+        Call setValues(wsName, colToPaste, startRowIndex, c)
+    End If
+    
+    c = col.re(COLRE_SHIP_FROM_WAREHOUSE)
+    If c >= 1 Then
+        For i = LBound(orders) To UBound(orders)
+            colToPaste(i, 1) = orders(i).shipFromWarehouse
+        Next i
+        Call setValues(wsName, colToPaste, startRowIndex, c)
+    End If
+
+    c = col.re(COLRE_SKU)
+    If c >= 1 Then
+        For i = LBound(orders) To UBound(orders)
+            colToPaste(i, 1) = orders(i).sku
+        Next i
+        Call setValues(wsName, colToPaste, startRowIndex, c)
+    End If
+
+    c = col.re(COLRE_PALLETS)
+    If c >= 1 Then
+        For i = LBound(orders) To UBound(orders)
+            colToPaste(i, 1) = orders(i).pallets
+        Next i
+        Call setValues(wsName, colToPaste, startRowIndex, c)
+    End If
+
+    c = col.re(COLRE_UNITS_PER_CARTON)
+    If c >= 1 Then
+        For i = LBound(orders) To UBound(orders)
+            colToPaste(i, 1) = orders(i).unitsPerCarton
+        Next i
+        Call setValues(wsName, colToPaste, startRowIndex, c)
+    End If
+
+    c = col.re(COLRE_CARTONS)
+    If c >= 1 Then
+        For i = LBound(orders) To UBound(orders)
+            colToPaste(i, 1) = orders(i).cartons
+        Next i
+        Call setValues(wsName, colToPaste, startRowIndex, c)
+    End If
+
+    c = col.re(COLRE_TOTAL_WEIGHT)
+    If c >= 1 Then
+        For i = LBound(orders) To UBound(orders)
+            colToPaste(i, 1) = orders(i).weight
+        Next i
+        Call setValues(wsName, colToPaste, startRowIndex, c)
+    End If
+
+    c = col.re(COLRE_TOTAL_VOLUME)
+    If c >= 1 Then
+        For i = LBound(orders) To UBound(orders)
+            colToPaste(i, 1) = orders(i).volume
+        Next i
+        Call setValues(wsName, colToPaste, startRowIndex, c)
+    End If
+
+    c = col.re(COLRE_SHIPPING_INFO)
+    If c >= 1 Then
+        For i = LBound(orders) To UBound(orders)
+            colToPaste(i, 1) = orders(i).shippingInfo
+        Next i
+        Call setValues(wsName, colToPaste, startRowIndex, c)
+    End If
+
+    c = col.re(COLRE_TOTAL_COST)
+    If c >= 1 Then
+        For i = LBound(orders) To UBound(orders)
+            colToPaste(i, 1) = orders(i).totalCost
+        Next i
+        Call setValues(wsName, colToPaste, startRowIndex, c)
+    End If
+
+    c = col.re(COLRE_BEST_SHIP_DATE)
+    If c >= 1 Then
+        For i = LBound(orders) To UBound(orders)
+            colToPaste(i, 1) = orders(i).bestShipDate
+        Next i
+        Call setValues(wsName, colToPaste, startRowIndex, c)
+    End If
+
+    c = col.re(COLRE_SHIP_TO_COUNTRY)
+    If c >= 1 Then
+        For i = LBound(orders) To UBound(orders)
+            colToPaste(i, 1) = orders(i).shipToCountry
+        Next i
+        Call setValues(wsName, colToPaste, startRowIndex, c)
+    End If
+
+    c = col.re(COLRE_ORDER_DATE)
+    If c >= 1 Then
+        For i = LBound(orders) To UBound(orders)
+            colToPaste(i, 1) = orders(i).orderDate
+        Next i
+        Call setValues(wsName, colToPaste, startRowIndex, c)
+    End If
+
+    c = col.re(COLRE_STATUS)
+    If c >= 1 Then
+        For i = LBound(orders) To UBound(orders)
+            colToPaste(i, 1) = orders(i).status
+        Next i
+        Call setValues(wsName, colToPaste, startRowIndex, c)
+    End If
+
+    c = col.re(COLRE_ARN)
+    If c >= 1 Then
+        For i = LBound(orders) To UBound(orders)
+            colToPaste(i, 1) = orders(i).arnNum
+        Next i
+        Call setValues(wsName, colToPaste, startRowIndex, c)
+    End If
+
+    c = col.re(COLRE_SHIPMENT_REF_ID)
+    If c >= 1 Then
+        For i = LBound(orders) To UBound(orders)
+            colToPaste(i, 1) = orders(i).shipmentRefId
+        Next i
+        Call setValues(wsName, colToPaste, startRowIndex, c)
+    End If
+
+    c = col.re(COLRE_INVOICE_ID)
+    If c >= 1 Then
+        For i = LBound(orders) To UBound(orders)
+            colToPaste(i, 1) = orders(i).invId
+        Next i
+        Call setValues(wsName, colToPaste, startRowIndex, c)
+    End If
+
+    c = col.re(COLRE_CARRIER)
+    If c >= 1 Then
+        For i = LBound(orders) To UBound(orders)
+            colToPaste(i, 1) = orders(i).carrier
+        Next i
+        Call setValues(wsName, colToPaste, startRowIndex, c)
+    End If
+
+    c = col.re(COLRE_SCAC)
+    If c >= 1 Then
+        For i = LBound(orders) To UBound(orders)
+            colToPaste(i, 1) = orders(i).scac
+        Next i
+        Call setValues(wsName, colToPaste, startRowIndex, c)
+    End If
+
+    c = col.re(COLRE_ACTUAL_SHIP_DATE)
+    If c >= 1 Then
+        For i = LBound(orders) To UBound(orders)
+            If orders(i).actualShipDate = CDate(0) Then
+                colToPaste(i, 1) = ""
+            Else
+                colToPaste(i, 1) = orders(i).actualShipDate
+            End If
+        Next i
+        Call setValues(wsName, colToPaste, startRowIndex, c)
+    End If
+
+    c = col.re(COLRE_ASN_ID)
+    If c >= 1 Then
+        For i = LBound(orders) To UBound(orders)
+            colToPaste(i, 1) = orders(i).asn
+        Next i
+        Call setValues(wsName, colToPaste, startRowIndex, c)
+    End If
+
+    c = col.re(COLRE_ASN_SUBMITTED)
+    If c >= 1 Then
+        For i = LBound(orders) To UBound(orders)
+            colToPaste(i, 1) = orders(i).asnSub
+        Next i
+        Call setValues(wsName, colToPaste, startRowIndex, c)
+    End If
+
+    c = col.re(COLRE_INVOICE_SUBMITTED)
+    If c >= 1 Then
+        For i = LBound(orders) To UBound(orders)
+            colToPaste(i, 1) = orders(i).invSub
+        Next i
+        Call setValues(wsName, colToPaste, startRowIndex, c)
+    End If
+
+    c = col.re(COLRE_NOTES)
+    If c >= 1 Then
+        For i = LBound(orders) To UBound(orders)
+            colToPaste(i, 1) = orders(i).notes
+        Next i
+        Call setValues(wsName, colToPaste, startRowIndex, c)
+    End If
+
+    c = col.re(COLRE_SCHED_SHIP_DATE)
+    If c >= 1 Then
+        For i = LBound(orders) To UBound(orders)
+            If orders(i).scheduledShipDate = CDate(0) Then
+                colToPaste(i, 1) = ""
+            Else
+                colToPaste(i, 1) = orders(i).scheduledShipDate
+            End If
+        Next i
+        Call setValues(wsName, colToPaste, startRowIndex, c)
+    End If
+    
+    c = col.re(COLRE_SHIPMENT_PALLETS)
+    If c >= 1 Then
+        For i = LBound(orders) To UBound(orders)
+            colToPaste(i, 1) = orders(i).palletsInShipment
+        Next i
+        Call setValues(wsName, colToPaste, startRowIndex, c)
+    End If
+    
+    c = col.re(COLRE_BO_CAUSE)
+    If c >= 1 Then
+        For i = LBound(orders) To UBound(orders)
+            colToPaste(i, 1) = orders(i).boCause
+        Next i
+        Call setValues(wsName, colToPaste, startRowIndex, c)
+    End If
+    
+    c = col.re(COLRE_BO_CORRECTIVE_ACTION)
+    If c >= 1 Then
+        For i = LBound(orders) To UBound(orders)
+            colToPaste(i, 1) = orders(i).boCorrectiveAction
+        Next i
+        Call setValues(wsName, colToPaste, startRowIndex, c)
+    End If
+
+    c = col.re(COLRE_OWNER)
+    If c >= 1 Then
+        For i = LBound(orders) To UBound(orders)
+            colToPaste(i, 1) = orders(i).owner
+        Next i
+        Call setValues(wsName, colToPaste, startRowIndex, c)
+    End If
+End Sub
+
+
+'----------------------------------------------------
+'--- SHEETS
+'----------------------------------------------------
+Sub deleteSheet(wsName As String, Optional displayWarning As Boolean = False)
+
+    If displayWarning = False Then
+        Application.DisplayAlerts = False 'switching off the alert button
+    End If
+
+    If wsExists(wsName) = True Then
+        ActiveWorkbook.Sheets(wsName).Delete 'deleting the sheet if it exists
+    End If
+    
+    If displayWarning = False Then
+        Application.DisplayAlerts = True 'switching on the alert button
+    End If
+End Sub
+
+Function copySheet(wsNameOriginal As String, wsNameCopy As String, Optional wsNameAddAfter As String = "") As String
+
+On Error GoTo Err
+    Dim error: error = True
+
+    Dim newName As String: newName = wsNameCopy
+    
+    Dim i As Integer: i = 2
+    Dim doesWsNameExist As Boolean: doesWsNameExist = True
+    
+    While doesWsNameExist = True
+    
+        doesWsNameExist = wsExists(newName)
+
+        If doesWsNameExist = True Then
+            newName = wsNameCopy & " (" & i & ")"
+            i = i + 1
+        End If
+    Wend
+    
+    If wsNameAddAfter = "" Then
+        ActiveWorkbook.Sheets(wsNameOriginal).Copy before:=ActiveWorkbook.Sheets(1)
+    Else
+        Worksheets(wsNameOriginal).Copy after:=ActiveWorkbook.Sheets(wsNameAddAfter)
+    End If
+    
+    ActiveSheet.name = newName
+    
+    error = False
+
+    copySheet = newName
+On Error GoTo 0
+Err:
+    
+    If error = True Then
+        MsgBox ("Couldn't copy sheet! Please try again.")
+        End
+    End If
+End Function
+
+Function wsExists(wsName As String, Optional wb As Workbook) As Boolean
+    'FROM https://stackoverflow.com/questions/6688131/test-or-check-if-sheet-exists
+    If wb Is Nothing Then Set wb = ActiveWorkbook
+    
+    Dim ws As Worksheet
+    On Error Resume Next
+    Set ws = wb.Sheets(wsName)
+    On Error GoTo 0
+    wsExists = Not ws Is Nothing
+End Function
+
+
+'----------------------------------------------------
+'--- SHIPMENTS
+'----------------------------------------------------
+Function getShipmentsFromManifest(wsName As String, arnsPresent As Boolean, excludeArns As Boolean, _
+                                  Optional columns As String = "", Optional values As String = "", Optional qualifiers As String = "") As Variant
+
+    Dim shipments As Variant
+    
+    Dim data As Variant: data = getValues(wsName, 1, 1, 0, 0)
+    Dim headerRow As Variant: headerRow = isoRow_from_2dArr(data, WS_MANIFEST_HEADER_ROW, False)
+
+    Dim col As col: Set col = New col: Call col.constructor(headerRow)
+    
+    If columns <> "" And values <> "" And qualifiers <> "" Then
+        Dim cols As Variant:   cols = SplitBase1(columns, ",", True)
+        Dim vals As Variant:   vals = SplitBase1(values, ",", True)
+        Dim quals As Variant:  quals = SplitBase1(qualifiers, ",", True)
+    End If
+    
+    
+    Dim i As Integer: i = WS_MANIFEST_FIRST_ROW
+    Dim s As Integer: s = 1
+    
+    Dim shipDatePortion As String: shipDatePortion = Left(wsName, 6)
+
+    Dim yr As Integer: yr = CInt("20" & Left(shipDatePortion, 2))
+    Dim mo As Integer: mo = CInt(Right(Left(shipDatePortion, 4), 2))
+    Dim dy As Integer: dy = CInt(Right(shipDatePortion, 2))
+    Dim shipDate As Date: shipDate = DateSerial(yr, mo, dy)
+    
+    While i <= UBound(data, 1)
+
+        If data(i, col.re(COLRE_PO)) <> "" And data(i, col.re(COLRE_SKU)) <> "" Then
+        
+            Dim orders As Variant
+            Dim currArn As String
+            Dim currShipToLoc As String
+
+            If arnsPresent = True Then
+                currArn = data(i, col.re(COLRE_ARN))
+            ElseIf arnsPresent = False Then
+                currShipToLoc = data(i, col.re(COLRE_SHIPTOLOC))
+            End If
+        
+            Dim g As Integer: g = i
+            Dim j As Integer: j = 0
+            Dim contLoop As Boolean: contLoop = True
+
+            While g <= UBound(data, 1) And _
+                  contLoop = True
+
+                If (arnsPresent = True And _
+                    data(g, col.re(COLRE_PO)) <> "" And _
+                    data(g, col.re(COLRE_SKU)) <> "" And _
+                    (data(g, col.re(COLRE_ARN)) = currArn Or _
+                     data(g, col.re(COLRE_ARN)) = "")) Or _
+                   (arnsPresent = False And _
+                    (data(g, col.re(COLRE_SHIPTOLOC)) = currShipToLoc Or _
+                     data(g, col.re(COLRE_SHIPTOLOC)) = "")) Then
+                
+                    Dim dataRow As Variant: dataRow = isoRow_from_2dArr(data, g)
+                    Dim shipFromWarehouse As String: shipFromWarehouse = Right(wsName, Len(wsName) - 7)
+                    Dim order As order: Set order = New order: Call order.constructor(dataRow, headerRow, False, shipFromWarehouse)
+                    Call variantPush(orders, order)
+                
+                    g = g + 1
+                    j = j + 1
+                Else
+                    contLoop = False
+                End If
+            Wend
+
+            If excludeArns = False Or _
+               (excludeArns = True And data(i, col.re(COLRE_ARN)) = "") Then
+                
+                Dim shipment As shipment:   Set shipment = New shipment: Call shipment.constructor(orders, CStr(shipDate), False)
+                Dim addShipment As Boolean: addShipment = True
+                
+                If columns <> "" And qualifiers <> "" Then
+                    'cols and vals and quals
+                    Dim c As Integer: c = LBound(cols)
+                    While c <= UBound(cols) And addShipment = True
+                        
+                        Dim currentCol As String: currentCol = LCase(cols(c))
+  
+                        If addShipment = True And currentCol = "arn" Or currentCol = "arnnumber" Or _
+                                                  currentCol = "arn number" Or currentCol = "arnnum" Or _
+                                                  currentCol = "arn num" Or currentCol = "amazon reference number" Then
+                            addShipment = comp(shipment.arnNum, vals(c), quals(c))
+                        End If
+                        
+                        If addShipment = True And currentCol = "pallet" Or currentCol = "pallets" Or _
+                                                  currentCol = "pallet total info" Or currentCol = "pallettotal" Or _
+                                                  currentCol = "pallets total info" Or currentCol = "palletstotal" Then
+                            addShipment = comp(shipment.totalPallets, CInt(vals(c)), quals(c))
+                        End If
+                        
+                        If addShipment = True And currentCol = "scac" Then
+                            addShipment = comp(shipment.scac, vals(c), quals(c))
+                        End If
+                        
+                        If addShipment = True And currentCol = "shipping info" Or currentCol = "shippinginfo" Or _
+                                                  currentCol = "ship info" Or currentCol = "shipinfo" Then
+                            addShipment = comp(shipment.shippingInfo, vals(c), quals(c))
+                        End If
+                        
+                        If addShipment = True And currentCol = "shiptocountry" Or currentCol = "ship to country" Or _
+                                                  currentCol = "shipcountry" Or currentCol = "ship country" Or _
+                                                  currentCol = "country" Then
+                            addShipment = comp(shipment.shipToCountry, vals(c), quals(c))
+                        End If
+                        
+                        If addShipment = True And currentCol = "pro" Or currentCol = "asn" Or _
+                                                  currentCol = "pronum" Or currentCol = "asnnum" Or _
+                                                  currentCol = "pro num" Or currentCol = "asn num" Or _
+                                                  currentCol = "pronumber" Or currentCol = "asnnumber" Or _
+                                                  currentCol = "pro number" Or currentCol = "asn number" Then
+                            addShipment = comp(shipment.proNum, vals(c), quals(c))
+                        End If
+                        
+                        If addShipment = True And currentCol = "inv" Or currentCol = "invoiced" Or _
+                                                  currentCol = "invoice" Or currentCol = "invsub" Or _
+                                                  currentCol = "invsub" Or currentCol = "invoicesub" Or _
+                                                  currentCol = "invioce sub" Then
+                                                  
+                            addShipment = comp(shipment.invSub, vals(c), quals(c))
+                        End If
+                        c = c + 1
+                    Wend
+                End If
+                
+                If addShipment = True Then
+                    Call variantPush(shipments, shipment)
+                End If
+
+            End If
+        
+            Erase orders
+
+            If j = 0 Then
+                i = i + 1
+            Else
+                i = i + j
+            End If
+    
+            s = s + 1
+        Else
+            i = i + 1
+        End If
+    Wend
+
+    getShipmentsFromManifest = shipments
+End Function
+
+
+
