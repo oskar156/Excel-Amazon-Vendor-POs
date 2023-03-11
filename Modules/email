@@ -1,0 +1,228 @@
+'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Module: email
+
+'--- ATTACHMENTS
+'Function attachWorksheets(emailItem As Variant, worksheetList As Variant) As Variant
+'Sub      deleteTempAttachmentFiles(paths As Variant)
+
+'--- DISPLAY
+'Sub      msgBoxAllFolderNames()
+
+'--- GET
+'Function getEmailFieldsByFolder(bigFolderName As String, folderName As String, field As String, Optional moveMailToFolder As String = "") As Variant
+
+'--- SEND
+'Sub      sendEmail(recipients As String, Optional subject As String = "", Optional body As String = "", Optional attachmentList As Variant, Optional showPreview As Boolean = False, _
+                    Optional isBodyHtml As Boolean = False)
+
+'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+'--- OPTIONS
+Option Explicit
+Option Base 1
+
+
+'----------------------------------------------------
+'--- ATTACHMENTS
+'----------------------------------------------------
+Function attachWorksheets(ByRef emailItem As Variant, ByVal worksheetList As Variant) As Variant
+
+    Dim wb As Workbook: Set wb = ActiveWorkbook
+    Dim listOfFilesCreated As Variant
+    
+    Dim i As Integer: i = LBound(worksheetList)
+    While i <= UBound(worksheetList)
+    
+        Dim filepath As String
+        
+        Dim wsName As String: wsName = worksheetList(i)
+        Dim ws As Worksheet: Set ws = wb.Sheets(wsName)
+        
+        If Right(wsName, 5) = "(xls)" Then
+        Else
+            Dim wsData As Variant: wsData = getValues(wsName, 1, 1, 0, 0)
+            Dim x2 As Integer: x2 = UBound(wsData, 1)
+            Dim y2 As Integer: y2 = UBound(wsData, 2)
+        
+            Dim activePrinterName As String: activePrinterName = getMacroParameter("primary printer", "Printer Name", False)
+            Call printOutSetUp(ws.name, activePrinterName, "portrait")
+        
+            filepath = saveWorksheetAsPdf(wb, ws, "", 1, 1, x2, y2)
+            emailItem.attachments.Add filepath
+        End If
+        
+        Call variantPush(listOfFilesCreated, filepath)
+        i = i + 1
+    Wend
+    
+    attachWorksheets = listOfFilesCreated
+End Function
+
+Sub deleteTempAttachmentFiles(paths As Variant)
+    Dim filePathToDelete As Variant
+    For Each filePathToDelete In paths
+        Kill filePathToDelete
+    Next
+End Sub
+
+
+'----------------------------------------------------
+'--- DISPLAY
+'----------------------------------------------------
+Sub msgBoxAllFolderNames()
+
+    Dim emails As Variant
+    
+    Dim outlook As outlook.Application: Set outlook = New outlook.Application
+    Dim ns As outlook.Namespace:        Set ns = outlook.GetNamespace("MAPI")
+    
+    Dim bigFolder As outlook.folder
+    Dim folder As outlook.folder
+    Dim bigMAPI As outlook.MAPIFolder
+    'Dim fMAPI As outlook.MAPIFolder 'only necessary to loop through emails in a folder
+
+    For Each bigFolder In ns.Folders 'Loop through the "big Folders"
+
+        Set bigMAPI = ns.Folders(bigFolder.name)
+        MsgBox ("BIG FOLDER: " & bigFolder.name)
+        'ActiveSheet.Cells(1, 1) = bigFolder.name
+        
+        For Each folder In bigMAPI.Folders 'Loop through the normal Folders
+        
+            'Set fMAPI = bigMAPI.Folders(folder.name)
+            Dim folderName As String: folderName = folder.name
+            MsgBox (folderName)
+            
+            'Set fMAPI = Nothing
+        Next folder
+        
+        Set bigMAPI = Nothing
+    Next bigFolder
+End Sub
+
+
+'----------------------------------------------------
+'--- GET
+'----------------------------------------------------
+Function getEmailFieldsByFolder(bigFolderName As String, folderName As String, field As String, Optional moveMailToFolder As String = "") As Variant
+
+    Dim emailFields As Variant
+    
+    Dim outlook As outlook.Application: Set outlook = New outlook.Application
+    Dim ns As outlook.Namespace:        Set ns = outlook.GetNamespace("MAPI")
+
+    Dim bigMAPI As outlook.MAPIFolder: Set bigMAPI = ns.Folders(bigFolderName)
+    Dim fMAPI As outlook.MAPIFolder:   Set fMAPI = bigMAPI.Folders(folderName)
+
+    Dim i As Long
+    For i = fMAPI.Items.Count To 1 Step -1 'Loop through all the emails in the folder
+
+        Dim mail As outlook.MailItem: Set mail = fMAPI.Items(i)
+
+        If TypeOf mail Is MailItem Then
+            field = LCase(field)
+            If field = "subject" Or field = "subjects" Then
+                Call variantPush(emailFields, mail.subject)
+            ElseIf field = "body" Or field = "bodies" Then
+                Call variantPush(emailFields, mail.body)
+            ElseIf field = "sender" Or field = "from" Then
+                Call variantPush(emailFields, mail.senderEmailAddress)
+            ElseIf field = "recipients" Or field = "recipient" Or field = "to" Then
+                Call variantPush(emailFields, mail.recipients)
+                Call variantPush(emailFields, mail.CC)
+            ElseIf field = "customemailobj" Then
+            
+                Dim subject As String:    subject = mail.subject
+                Dim body As String:       body = mail.body
+                Dim recipients As String: recipients = "" ' = mail.recipients 'mail.CC
+                Dim sender As String:     sender = mail.senderEmailAddress
+                Dim sentDate As Date:     sentDate = CDate(mail.SentOn)
+                
+                Dim customEmailObj As emailObj
+                Set customEmailObj = New emailObj
+                Call customEmailObj.constructor(subject, body, recipients, sender, sentDate)
+
+                Call variantPush(emailFields, customEmailObj)
+                
+            End If
+
+            If moveMailToFolder <> "" Then
+                Dim moveFolder As outlook.MAPIFolder: Set moveFolder = bigMAPI.Folders(moveMailToFolder)
+                Call mail.Move(moveFolder)
+            End If
+        End If
+    Next i
+            
+    Set fMAPI = Nothing
+    Set bigMAPI = Nothing
+    
+    getEmailFieldsByFolder = emailFields
+End Function
+
+
+'----------------------------------------------------
+'--- SEND
+'----------------------------------------------------
+Sub sendEmail(recipients As String, Optional subject As String = "", Optional body As String = "", Optional attachmentList As Variant, Optional showPreview As Boolean = False, _
+              Optional isBodyHtml As Boolean = False)
+    Dim procTitle As String: procTitle = "sendEmail"
+    
+    If showPreview = True Then
+        Dim i As Integer
+        'Show User Email Preview
+        Dim msg As String: msg = ""
+        msg = msg & "Press OK to Send this email..." & endl(2)
+    
+        msg = msg & "--- RECIPIENTS -----" & endl(1)
+        msg = msg & recipients & endl(2)
+    
+        msg = msg & "--- SUBJECT -----" & endl(1)
+        msg = msg & subject & endl(2)
+    
+        msg = msg & "--- ATTACHMENTS -----" & endl(1)
+        For i = LBound(attachmentList) To UBound(attachmentList)
+            msg = msg & attachmentList(i) & endl(1)
+        Next i
+        msg = msg & endl(1)
+    
+        msg = msg & "--- BODY -----" & endl(1)
+        msg = msg & body & endl(2)
+    
+        Dim result As Integer: result = prompt_okCancel(msg, procTitle)
+        If result = vbCancel Then
+            Call prompt_alert("No emails sent.", procTitle)
+            End
+        End If
+    End If
+
+    Dim EmailApp As outlook.Application
+    Set EmailApp = New outlook.Application
+    Dim emailItem As outlook.MailItem
+    Set emailItem = EmailApp.CreateItem(olMailItem)
+    
+    emailItem.To = recipients
+    emailItem.subject = subject
+    
+    If isBodyHtml = True Then
+        emailItem.htmlBody = body
+    ElseIf isBodyHtml = False Then
+        emailItem.body = body
+    End If
+    
+    Dim filePathsToDelete As Variant
+    Dim attachmentsExist As Boolean
+
+    If isVariantArrayInit(attachmentList) = True Then 'And (attachmentList(LBound(attachmentList) <> ""))
+        If attachmentList(LBound(attachmentList)) <> "" Then
+            filePathsToDelete = attachWorksheets(emailItem, attachmentList)
+            attachmentsExist = True
+        End If
+    End If
+    
+    emailItem.Send
+    
+    If attachmentsExist = True Then deleteTempAttachmentFiles (filePathsToDelete)
+End Sub
+
+
+
