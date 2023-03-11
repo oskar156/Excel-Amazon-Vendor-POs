@@ -1,0 +1,1042 @@
+'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Class: Archive
+'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+'--- FIELDS
+
+'--- CONSTRUCTOR
+'Public Sub constructor()
+
+'--- PRIVATE METHODS
+'Private Sub      m_createYearFolder(orderDate As Date)
+'Private Sub      m_createMonthWS(orderDate As Date)
+'Private Function getCsvPathFromDate(orderDate As Date) As String
+
+'--- PUBLIC METHODS
+'Public Function addOrder(csvPath As String, order As order, Optional headerRowIndex As Integer = 1) As String
+'Public Function getOrders(Optional colreList As Variant, Optional valueList As Variant, Optional qualfieriList As Variant, _
+                           Optional startDate As Date = CDate("0"), Optional endDate As Date = CDate("0"), Optional getItemData As Boolean = False) As Variant
+'Public Function checkIfOrderExists(Optional colreList As Variant, Optional valueList As Variant, Optional qualfieriList As Variant, _
+                                    Optional startDate As Date = CDate("0"), Optional endDate As Date = CDate("0")) As Boolean
+'Public Sub updateOrder(po As String, sku As String, status As String, bestShipDate As Date, orderDate As Date, shipFromWarehouse As String)
+'Public Sub updateSingleOrder(po As String, sku As String, orderDate As Date, colre As String, value As Variant)
+'Public Sub updateOrders(ous As Variant)
+'Public Function manifestsToCreate(daysToCheck As Integer) As Variant
+'Public Function lookupIfShipDateExists(shipDate As Date) As Variant
+
+'--- PUBLIC METHODS (getOrder Presets)
+'Public Function getOpenAndBackOrders() As Variant
+'Public Function getOpenOrders() As Variant
+'Public Function getLateOrders() As Variant
+'Public Function getBackOrders() As Variant
+'Public Function getTodaysOrders() As Variant
+'Public Function getOrdersByShipDate(dt As Date) As Variant
+'Public Function simpleOrderSearchFromVariant(param As String, values As Variant, Optional qualifier As String = "=") As Variant
+'Public Function simpleOrderSearchFromStr(param As String, values As String, Optional qualifier As String = "=", Optional delimeter As String = ",") As Variant
+
+'--- GET/LET/SET
+
+'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+'--- CLASS DEPENDENCIES
+'User Class Col
+    're() in addOrder()
+
+'--- OPTIONS
+Option Explicit
+Option Base 1
+
+
+'----------------------------------------------------
+'--- FIELDS
+'----------------------------------------------------
+Private m_archiveFolderPath As String
+
+
+'----------------------------------------------------
+'--- CONSTRUCTOR
+'----------------------------------------------------
+Public Sub constructor()
+    'MsgBox (Environ("username"))
+    If Application.userName = "Oscar Keshishyan" Then
+        m_archiveFolderPath = "C:\Users\" & "oscar" & "\OneDrive - Culligan\Orders\Archive\"
+    Else
+        m_archiveFolderPath = "C:\Users\" & Environ("username") & "\OneDrive - Culligan\Orders\Archive\"
+    End If
+End Sub
+
+
+'----------------------------------------------------
+'--- PRIVATE METHODS
+'----------------------------------------------------
+
+Private Sub m_createYearFolder(orderDate As Date)
+    Dim folderPath As String: folderPath = m_archiveFolderPath & CStr(Year(orderDate))
+    If pathExists(folderPath) = False Then: createFolder (folderPath)
+End Sub
+
+Private Sub m_createMonthWS(orderDate As Date)
+    Dim csvPath As String: csvPath = m_archiveFolderPath & CStr(Year(orderDate)) & "\" & CStr(month(orderDate)) & ".csv"
+    If pathExists(csvPath) = False Then
+        Dim sourcePath As String: sourcePath = m_archiveFolderPath & ARCHIVE_TEMPLATE_CSV_PATH
+        Dim overwrite As Boolean: overwrite = False
+        Call copyFile(sourcePath, csvPath, overwrite)
+    End If
+End Sub
+
+Public Function getCsvPathFromDate(orderDate As Date) As String
+    Dim csvPath As String
+    csvPath = m_archiveFolderPath & CStr(Year(orderDate)) & "\" & CStr(month(orderDate)) & ".csv"
+    getCsvPathFromDate = csvPath
+End Function
+
+
+'----------------------------------------------------
+'--- PUBLIC METHODS
+'----------------------------------------------------
+
+Public Function addOrder(order As order, Optional headerRowIndex As Integer = 1) As String
+
+    Dim orderDate As Date: orderDate = order.orderDate
+    Call m_createYearFolder(orderDate)
+    Call m_createMonthWS(orderDate)
+    Dim csvPath As String: csvPath = Me.getCsvPathFromDate(orderDate)
+
+    Dim data As Variant: data = parse2dArrFromCsv(csvPath, """,""")
+    Dim headerRow As Variant: headerRow = isoRow_from_2dArr(data, headerRowIndex, False)
+    Dim col As col: Set col = New col: Call col.constructor(headerRow) 'col object lets us match data with differently ordered columns
+    Dim c As Integer 'c is the column index
+
+    Dim rowLen As Integer: rowLen = UBound(headerRow)
+    Dim row() As Variant: ReDim Preserve row(1, rowLen)
+
+    'OG
+    c = col.re(COLRE_PO):                 If c >= 1 Then row(1, c) = order.po 'If c >= 1 Then... ie If column exists in headerRow, Then ...
+    c = col.re(COLRE_VENDOR):             If c >= 1 Then row(1, c) = order.vendor
+    c = col.re(COLRE_SHIPTOLOC):          If c >= 1 Then row(1, c) = order.shipToLoc
+    c = col.re(COLRE_ASIN):               If c >= 1 Then row(1, c) = order.asin
+    c = col.re(COLRE_EXTERNAL_ID):        If c >= 1 Then row(1, c) = order.externalId
+    c = col.re(COLRE_MODEL_NUM):          If c >= 1 Then row(1, c) = order.modelNum
+    c = col.re(COLRE_TITLE):              If c >= 1 Then row(1, c) = order.title
+    c = col.re(COLRE_AVAILABILITY):       If c >= 1 Then row(1, c) = order.availability
+    c = col.re(COLRE_WINDOW_TYPE):        If c >= 1 Then row(1, c) = order.windowType
+    c = col.re(COLRE_WINDOW_START):       If c >= 1 Then row(1, c) = order.windowStart
+    c = col.re(COLRE_WINDOW_END):         If c >= 1 Then row(1, c) = order.windowEnd
+    c = col.re(COLRE_EXPECTED_DATE):      If c >= 1 Then row(1, c) = order.expDate
+    c = col.re(COLRE_QUANTITY_REQUESTED): If c >= 1 Then row(1, c) = order.quantReq
+    c = col.re(COLRE_EXPECTED_QUANT):     If c >= 1 Then row(1, c) = order.quantExp
+    c = col.re(COLRE_UNIT_COST):          If c >= 1 Then row(1, c) = order.unitCost
+
+    'AFTER IMPORT
+    Dim itemsData As Variant: itemsData = getValues("items", 2, 1, 0, 0)
+    c = col.re(COLRE_SHIP_FROM_WAREHOUSE): If c >= 1 Then row(1, c) = order.shipFromWarehouse
+    c = col.re(COLRE_SKU):                 If c >= 1 Then row(1, c) = order.sku
+    c = col.re(COLRE_PALLETS):          If c >= 1 Then row(1, c) = order.pallets
+    c = col.re(COLRE_UNITS_PER_CARTON): If c >= 1 Then row(1, c) = order.unitsPerCarton
+    c = col.re(COLRE_CARTONS):          If c >= 1 Then row(1, c) = order.cartons
+    c = col.re(COLRE_TOTAL_WEIGHT):     If c >= 1 Then row(1, c) = order.weight
+    c = col.re(COLRE_TOTAL_VOLUME):     If c >= 1 Then row(1, c) = order.volume
+    c = col.re(COLRE_SHIPPING_INFO):    If c >= 1 Then row(1, c) = order.shippingInfo
+    c = col.re(COLRE_TOTAL_COST):       If c >= 1 Then row(1, c) = order.totalCost
+    c = col.re(COLRE_BEST_SHIP_DATE):   If c >= 1 Then row(1, c) = order.bestShipDate
+    c = col.re(COLRE_SHIP_TO_COUNTRY):  If c >= 1 Then row(1, c) = order.shipToCountry
+    c = col.re(COLRE_ORDER_DATE):       If c >= 1 Then row(1, c) = order.orderDate
+    c = col.re(COLRE_STATUS):           If c >= 1 Then row(1, c) = order.status
+    
+    'AFTER ADDED TO SHIPMENT
+    c = col.re(COLRE_ARN):               If c >= 1 Then row(1, c) = order.arnNum
+    c = col.re(COLRE_SHIPMENT_REF_ID):   If c >= 1 Then row(1, c) = order.shipmentRefId
+    c = col.re(COLRE_INVOICE_ID):        If c >= 1 Then row(1, c) = order.invId
+    c = col.re(COLRE_CARRIER):           If c >= 1 Then row(1, c) = order.carrier
+    c = col.re(COLRE_SCAC):              If c >= 1 Then row(1, c) = order.scac
+    c = col.re(COLRE_ACTUAL_SHIP_DATE):  If c >= 1 Then row(1, c) = order.actualShipDate
+    c = col.re(COLRE_ASN_ID):            If c >= 1 Then row(1, c) = order.asn
+    c = col.re(COLRE_ASN_SUBMITTED):     If c >= 1 Then row(1, c) = order.asnSub
+    c = col.re(COLRE_INVOICE_SUBMITTED): If c >= 1 Then row(1, c) = order.invSub
+    c = col.re(COLRE_NOTES):             If c >= 1 Then row(1, c) = order.notes
+    c = col.re(COLRE_ORDER_TYPE):        If c >= 1 Then row(1, c) = order.orderType
+    
+    c = col.re(COLRE_SCHED_SHIP_DATE):  If c >= 1 Then row(1, c) = order.scheduledShipDate
+    c = col.re(COLRE_SHIPMENT_PALLETS): If c >= 1 Then row(1, c) = order.palletsInShipment
+
+    Call writeToCsvFile(csvPath, row, False)
+
+    addOrder = csvPath
+End Function
+
+Public Function getOrders(Optional colreList As Variant, Optional valueList As Variant, Optional qualfieriList As Variant, _
+                          Optional startDate As Date = CDate("0"), Optional endDate As Date = CDate("0"), Optional getItemData As Boolean = False) As Variant
+
+    If isVariantArrayInit(colreList) = False Then
+        ReDim colreList(1)
+        colreList(1) = "_SKIP_"
+    End If
+    If isVariantArrayInit(valueList) = False Then
+        ReDim valueList(1)
+        valueList(1) = "_SKIP_"
+    End If
+    If isVariantArrayInit(qualfieriList) = False Then
+        ReDim qualfieriList(1)
+        qualfieriList(1) = "_SKIP_"
+    End If
+
+    Dim today As Date: today = Date
+
+    If startDate = CDate("0") Then 'if start date not provided, then set to GET_ORDERS_DEFAULT_MONTHS months in the past
+         startDate = DateSerial(Year(today), month(today) - GET_ORDERS_DEFAULT_MONTHS, 1)
+    Else 'if start date provided, then set it
+         startDate = DateSerial(Year(startDate), month(startDate), 1)
+    End If
+    
+    If endDate = CDate("0") Then 'if end date not provided, then set to today
+         endDate = DateSerial(Year(today), month(today), 1)
+    Else 'if end date provided, then set it
+         endDate = DateSerial(Year(endDate), month(endDate), 1)
+         startDate = DateSerial(2015, 1, 1)
+    End If
+
+    Dim ordersToGet() As Variant
+
+    Dim itemsData As Variant
+    If getItemData = True Then
+        itemsData = getValues(WS_NAME_ITEMS, 2, 1, 0, 0)
+    End If
+        
+    Dim iterDate As Date: iterDate = endDate
+    While iterDate >= startDate 'for each month from lastMonth to firstMonth
+
+        Dim csvPath As String: csvPath = Me.getCsvPathFromDate(iterDate)
+
+        If pathExists(csvPath) = True Then 'skip months that have no workbook
+
+            Dim csvData As Variant: csvData = parse2dArrFromCsv(csvPath) 'get data from csv
+            Dim headerRow As Variant: headerRow = isoRow_from_2dArr(csvData, 1, False) 'row is 1d arr
+            Dim col As col: Set col = New col: Call col.constructor(headerRow)
+
+            Dim iter As Integer: iter = LBound(csvData, 1)
+            While iter <= UBound(csvData, 1)
+                iter = iter + 1
+            Wend
+                       
+            Dim x As Integer: x = LBound(csvData, 1) + 1 '+1 to skip headerRow
+            While x <= UBound(csvData, 1) 'for each row in csvData
+
+                Dim row As Variant: row = isoRow_from_2dArr(csvData, x, False) 'row is 1d arr
+                Dim addRow As Boolean: addRow = True
+
+                Dim c As Integer: c = LBound(colreList)
+                While c <= UBound(colreList) And addRow = True 'for ech param in paramList
+
+                    Dim colRegexPattern As String: colRegexPattern = colreList(c)
+                    Dim y As Integer: y = col.re(colRegexPattern) 'match param to csvData
+                        
+                    Dim iterations As Integer: iterations = 1
+                    Dim useOrLogic As Boolean: useOrLogic = False
+
+                    If isVariantArrayInit(valueList(c)) = True Or isVariantArrayInit(colreList(c)) = True Then
+                        iterations = UBound(valueList(c))
+                        useOrLogic = True
+                    End If
+
+                    Dim i As Integer: i = 1
+                    Dim endLoop As Boolean: endLoop = False
+
+                    While i <= iterations And endLoop = False
+                        
+                        'get data
+                        Dim csvValue As Variant: csvValue = csvData(x, y)
+                            
+                        Dim rawCompValue As Variant: rawCompValue = valueList(c)
+                        Dim compValue As Variant
+
+                        Dim rawQualValue As Variant: rawQualValue = qualfieriList(c)
+                        Dim qualValue As Variant
+                            
+                        If useOrLogic = True Then
+                            compValue = rawCompValue(i)
+                            qualValue = rawQualValue(i)
+                        Else
+                            compValue = rawCompValue
+                            qualValue = rawQualValue
+                        End If
+
+                        If Left(compValue, 7) = "/REGEX/" Then
+                            Dim colRegexPatternComp As String: colRegexPatternComp = Right(compValue, Len(compValue) - 7)
+                            Dim yComp As Integer: yComp = col.re(colRegexPatternComp) 'match param to csvData
+                            Dim csvValueComp As Variant: csvValueComp = csvData(x, yComp)
+                            compValue = csvValueComp
+                        End If
+
+                        'VarType conversion
+                        If VarType(compValue) = vbInteger Then
+                            csvValue = CInt(csvValue)
+                        ElseIf VarType(compValue) = vbLong Then
+                            csvValue = CLng(csvValue)
+                        ElseIf VarType(compValue) = vbSingle Then
+                            csvValue = CSng(csvValue)
+                        ElseIf VarType(compValue) = vbDouble Then
+                            csvValue = CDbl(csvValue)
+                        ElseIf VarType(compValue) = vbDate Then
+                        
+                            If csvValue = "" Then
+                                csvValue = CDate(0)
+                            Else
+                                csvValue = CDate(csvValue)
+                            End If
+                                
+                            compValue = DateSerial(Year(compValue), month(compValue), day(compValue))
+                            csvValue = DateSerial(Year(csvValue), month(csvValue), day(csvValue))
+                        End If
+
+                        'Qualifier Comparison
+                        If qualValue = "=" And csvValue <> compValue Then
+                            addRow = False
+                        ElseIf qualValue = "<>" And csvValue = compValue Then
+                            addRow = False
+                        ElseIf qualValue = "<=" And csvValue > compValue Then
+                            addRow = False
+                        ElseIf qualValue = ">=" And csvValue < compValue Then
+                            addRow = False
+                        ElseIf qualValue = "<" And csvValue >= compValue Then
+                            addRow = False
+                        ElseIf qualValue = ">" And csvValue <= compValue Then
+                            addRow = False
+                        ElseIf qualValue = "Left" And Left(csvValue, Len(compValue)) <> compValue Then
+                            addRow = False
+                        ElseIf qualValue = "Right" And Right(csvValue, Len(compValue)) <> compValue Then
+                            addRow = False
+                        ElseIf useOrLogic = True Then
+                            addRow = True
+                            endLoop = True
+                        End If
+
+                        i = i + 1
+                    Wend
+                        
+                    c = c + 1
+                Wend 'END for ech param in paramList
+
+                If addRow = True Then
+                    If row(1) <> "" Then 'if csvData(param) =(qualfieriList(param)= valueList(param)
+                    
+                        Dim order As order 'create order object
+                        Set order = New order
+
+                        If getItemData = True Then
+                            Call order.constructor(row, headerRow, itemsData:=itemsData)
+                        ElseIf getItemData = False Then
+                            Call order.constructor(row, headerRow)
+                        End If
+                        
+                        Call variantPush(ordersToGet, order)
+                    End If
+                End If
+                
+                x = x + 1
+            Wend 'END for each row in csvData
+        End If
+
+        iterDate = DateSerial(Year(iterDate), month(iterDate) - 1, 1)
+    Wend 'END for each month from lastMonth to firstMonth
+
+    getOrders = ordersToGet
+End Function
+
+Public Function checkIfOrderExists(Optional colreList As Variant, Optional valueList As Variant, Optional qualfieriList As Variant, _
+                                   Optional startDate As Date = CDate("0"), Optional endDate As Date = CDate("0")) As Boolean
+    If isVariantArrayInit(colreList) = False Then
+        ReDim colreList(1)
+        colreList(1) = "_SKIP_"
+    End If
+    If isVariantArrayInit(valueList) = False Then
+        ReDim valueList(1)
+        valueList(1) = "_SKIP_"
+    End If
+    If isVariantArrayInit(qualfieriList) = False Then
+        ReDim qualfieriList(1)
+        qualfieriList(1) = "_SKIP_"
+    End If
+
+    Dim today As Date: today = Date
+    
+    If startDate = CDate("0") Then 'if start date not provided, then set to 12 months in the past
+         startDate = DateSerial(Year(today), month(today) - GET_ORDERS_DEFAULT_MONTHS, 1)
+    Else 'if start date provided, then set it
+         startDate = DateSerial(Year(today), month(today) - GET_ORDERS_DEFAULT_MONTHS, 1)
+    End If
+    
+    If endDate = CDate("0") Then 'if end date not provided, then set to today
+         endDate = DateSerial(Year(today), month(today), 1)
+    Else 'if end date provided, then set it
+         endDate = DateSerial(Year(today), month(today), 1)
+    End If
+    
+    Dim orderExists As Boolean: orderExists = False
+
+    Dim iterDate As Date: iterDate = endDate
+
+    While iterDate >= startDate 'for each month from lastMonth to firstMonth
+
+        Dim csvPath As String: csvPath = Me.getCsvPathFromDate(iterDate)
+
+        If pathExists(csvPath) = True Then 'skip months that have no workbook
+
+            Dim csvData As Variant: csvData = parse2dArrFromCsv(csvPath) 'get data from csv
+            Dim headerRow As Variant: headerRow = isoRow_from_2dArr(csvData, 1, False) 'row is 1d arr
+            Dim col As col: Set col = New col: Call col.constructor(headerRow)
+
+            Dim iter As Integer: iter = LBound(csvData, 1)
+            While iter <= UBound(csvData, 1)
+
+                iter = iter + 1
+            Wend
+                       
+            Dim x As Integer: x = LBound(csvData, 1) + 1 '+1 to skip headerRow
+
+            While x <= UBound(csvData, 1) And orderExists = False 'for each row in csvData
+
+                Dim row As Variant: row = isoRow_from_2dArr(csvData, x, False) 'row is 1d arr
+
+                If colreList(1) <> "_SKIP_" And valueList(1) <> "_SKIP_" And qualfieriList(1) <> "_SKIP_" Then
+
+                    Dim c As Integer: c = LBound(colreList)
+                    While c <= UBound(colreList) 'And orderExists = False 'for ech param in paramList
+
+                        Dim colRegexPattern As String: colRegexPattern = colreList(c)
+                        Dim y As Integer: y = col.re(colRegexPattern) 'match param to csvData
+                        Dim csvValue As Variant: csvValue = csvData(x, y)
+
+                        If csvValue <> "" Then
+                        
+                            If VarType(valueList(c)) = 2 Then csvValue = CInt(csvValue)
+                            If VarType(valueList(c)) = 3 Then csvValue = CLng(csvValue)
+                            If VarType(valueList(c)) = 4 Then csvValue = CSng(csvValue)
+                            If VarType(valueList(c)) = 5 Then csvValue = CDbl(csvValue)
+                            If VarType(valueList(c)) = 7 Then csvValue = CDate(csvValue)
+   
+                            If qualfieriList(c) = "=" And csvValue = valueList(c) Then
+                                orderExists = True
+                            ElseIf qualfieriList(c) = "<>" And csvValue <> valueList(c) Then
+                                orderExists = True
+                            ElseIf qualfieriList(c) = "<=" And csvValue <= valueList(c) Then
+                                orderExists = True
+                            ElseIf qualfieriList(c) = ">=" And csvValue >= valueList(c) Then
+                                orderExists = True
+                            ElseIf qualfieriList(c) = "<" And csvValue < valueList(c) Then
+                                orderExists = True
+                            ElseIf qualfieriList(c) = ">" And csvValue > valueList(c) Then
+                                orderExists = True
+                            Else
+                                orderExists = False
+                            End If
+                        End If
+
+                        c = c + 1
+                    Wend 'END for ech param in paramList
+                End If
+
+                x = x + 1
+            Wend 'END for each row in csvData
+        End If
+        
+        iterDate = DateSerial(Year(iterDate), month(iterDate) - 1, 1)
+    Wend 'END for each month from lastMonth to firstMonth
+
+    checkIfOrderExists = orderExists
+End Function
+
+Public Sub updateOrder(po As String, sku As String, status As String, bestShipDate As Date, orderDate As Date, shipFromWarehouse As String)
+
+    Dim today As Date:     today = Now()
+    Dim yesterday As Date: yesterday = today - 1
+    
+    'get csv data
+    Dim path As String:  path = Me.getCsvPathFromDate(orderDate)
+    Dim data As Variant: data = parse2dArrFromCsv(path)
+    Dim lines As Variant: lines = readTextFile(path)
+
+    'loop through data, keeping what hasnt changed
+    Dim unchangedLines As Variant
+    Dim changedLineIndex As Integer: changedLineIndex = -1
+    
+    Dim headerRow As Variant: headerRow = isoRow_from_2dArr(data, 1, False)
+    Dim col As col: Set col = New col: Call col.constructor(headerRow)
+    Dim lookForMatch As Boolean: lookForMatch = True
+
+    Dim x As Integer: x = LBound(data, 1)
+    While x <= UBound(data, 1)
+    
+        Dim matchFound As Boolean: matchFound = False
+        
+        If lookForMatch = True And _
+           data(x, col.re(COLRE_PO)) = po And _
+           data(x, col.re(COLRE_SKU)) = sku Then
+           
+            matchFound = True
+            lookForMatch = False
+            changedLineIndex = x
+        End If
+        
+        If matchFound = False Then
+            Call variantPush(unchangedLines, lines(x))
+        End If
+        x = x + 1
+    Wend
+
+    'write updated file
+    If changedLineIndex <> -1 Then
+    
+        Dim okToUpdate As Boolean: okToUpdate = False
+
+        If status = "canceled" Then
+
+            data(changedLineIndex, col.re(COLRE_STATUS)) = "canceled"
+
+            'data(changedLineIndex, col.re(COLRE_BEST_SHIP_DATE)) = bestShipDate
+            okToUpdate = True
+        End If
+        
+        If bestShipDate >= today Then
+
+            If bestShipDate > data(changedLineIndex, col.re(COLRE_WINDOW_END)) And status <> "canceled" Then
+                data(changedLineIndex, col.re(COLRE_STATUS)) = "back order"
+                status = "back order"
+            End If
+            
+            data(changedLineIndex, col.re(COLRE_BEST_SHIP_DATE)) = bestShipDate
+            okToUpdate = True
+        End If
+        
+        If status = "open order" Then
+
+            data(changedLineIndex, col.re(COLRE_STATUS)) = "open order"
+            'data(changedLineIndex, col.re(COLRE_BEST_SHIP_DATE)) = bestShipDate
+            okToUpdate = True
+        Else
+            okToUpdate = False
+        End If
+
+
+
+            Dim warehouseData As Variant: warehouseData = getValues(WS_WAREHOUSES_EW_NAME, 1, 1, 0, 0)
+            Dim w As Integer: w = WS_WAREHOUSES_EW_ROW_FIRST
+            Dim warehouseExists As Boolean: warehouseExists = False
+
+            
+            While w <= UBound(warehouseData, 1) And _
+                  warehouseExists = False
+                  
+                'trim?
+
+                If warehouseData(w, WS_WAREHOUSES_EW_COL_NAME) = shipFromWarehouse Then
+                    data(changedLineIndex, col.re(COLRE_SHIP_FROM_WAREHOUSE)) = shipFromWarehouse
+                    warehouseExists = True
+                End If
+                
+                w = w + 1
+            Wend
+
+
+
+        If warehouseExists = True Then
+            okToUpdate = True
+        Else
+            okToUpdate = False
+        End If
+        
+        If okToUpdate = True Then
+
+            Call writeToTextFile(path, unchangedLines, True)
+            Dim changedLine As Variant: changedLine = isoRow_from_2dArr(data, changedLineIndex, True)
+
+            Dim cl As Integer: cl = LBound(changedLine, 1) 'UBound(changedLine, 1) + 5000
+            While cl <= UBound(changedLine, 1)
+
+                Dim cl2 As Integer: cl2 = LBound(changedLine, 2)
+                While cl2 <= UBound(changedLine, 2)
+                
+                    If VarType(changedLine(cl, cl2)) = vbString Then
+
+                        'changedLine(cl, cl2) = Replace(changedLine(cl, cl2), vbNewLine, "")
+                        'changedLine(cl, cl2) = Replace(changedLine(cl, cl2), vbLf, "")
+                        'changedLine(cl, cl2) = Replace(changedLine(cl, cl2), vbCrLf, "")
+                        'changedLine(cl, cl2) = Replace(changedLine(cl, cl2), vbCr, "")
+                    End If
+                    
+                    cl2 = cl2 + 1
+                Wend
+                
+                cl = cl + 1
+            Wend
+
+            Call writeToCsvFile(path, changedLine, False)
+        End If
+    End If
+
+End Sub
+
+Public Sub updateSingleOrder(po As String, sku As String, orderDate As Date, colre As String, value As Variant)
+
+    'remove new lines etc...
+    value = Replace(value, vbNewLine, ",")
+    value = Replace(value, vbLf, ",")
+    value = Replace(value, vbCrLf, ",")
+    value = Replace(value, vbCr, ",")
+    
+    'get csv data
+    Dim path As String:  path = Me.getCsvPathFromDate(orderDate)
+    Dim data As Variant: data = parse2dArrFromCsv(path)
+    Dim lines As Variant: lines = readTextFile(path)
+    
+    'loop through data, keeping what hasnt changed
+    Dim unchangedLines As Variant
+    Dim changedLineIndex As Integer: changedLineIndex = -1
+    
+    Dim headerRow As Variant: headerRow = isoRow_from_2dArr(data, 1, False)
+    Dim col As col: Set col = New col: Call col.constructor(headerRow)
+    Dim lookForMatch As Boolean: lookForMatch = True
+
+    Dim x As Integer: x = LBound(data, 1)
+    While x <= UBound(data, 1)
+    
+        Dim matchFound As Boolean: matchFound = False
+        
+        If lookForMatch = True And _
+           data(x, col.re(COLRE_PO)) = po And _
+           data(x, col.re(COLRE_SKU)) = sku Then
+           
+            matchFound = True
+            lookForMatch = False
+            changedLineIndex = x
+        End If
+        
+        If matchFound = False Then
+            Call variantPush(unchangedLines, lines(x))
+        End If
+        x = x + 1
+    Wend
+
+    'write updated file
+    Call writeToTextFile(path, unchangedLines, True)
+
+    If changedLineIndex <> -1 Then
+        data(changedLineIndex, col.re(colre)) = value
+        Dim changedLine As Variant: changedLine = isoRow_from_2dArr(data, changedLineIndex, True)
+        Call writeToCsvFile(path, changedLine, False)
+    End If
+End Sub
+
+Public Sub updateOrders(ous As Variant)
+
+    Dim a, b As Integer 'reserved for loop
+    Dim temp As Variant
+    Dim oob As Boolean
+
+    a = LBound(ous) + 1 'SORT ous BY SKU
+    While a <= UBound(ous)
+        b = a: oob = False
+        While oob = False And ous(b).sku < ous(b - 1).sku
+            Set temp = ous(b): Set ous(b) = ous(b - 1): Set ous(b - 1) = temp
+            b = b - 1
+            If b = LBound(ous) Then
+                oob = True: b = LBound(ous) + 1
+            End If
+        Wend
+        a = a + 1
+    Wend
+    a = LBound(ous) + 1 'SORT ous BY PO
+    While a <= UBound(ous)
+        b = a: oob = False
+        While oob = False And ous(b).po < ous(b - 1).po
+            Set temp = ous(b): Set ous(b) = ous(b - 1): Set ous(b - 1) = temp
+            b = b - 1
+            If b = LBound(ous) Then
+                oob = True: b = LBound(ous) + 1
+            End If
+        Wend
+        a = a + 1
+    Wend
+    a = LBound(ous) + 1 'SORT ous BY ORDER DATE
+    While a <= UBound(ous)
+        b = a: oob = False
+        While oob = False And ous(b).orderDate < ous(b - 1).orderDate
+            Set temp = ous(b): Set ous(b) = ous(b - 1): Set ous(b - 1) = temp
+            b = b - 1
+            If b = LBound(ous) Then
+                oob = True: b = LBound(ous) + 1
+            End If
+        Wend
+        a = a + 1
+    Wend
+
+    Dim uniqueOrderMonths As Variant
+    a = LBound(ous)
+    While a <= UBound(ous)
+    
+        Dim moYr As String: moYr = CStr(month(ous(a).orderDate)) & "|" & CStr(Year(ous(a).orderDate))
+    
+        If a = LBound(ous) Then
+            Call variantPush(uniqueOrderMonths, moYr)
+        Else
+            b = LBound(uniqueOrderMonths)
+            Dim endBLoop As Boolean: endBLoop = False
+            Dim addmoyr As Boolean: addmoyr = True
+            While b <= UBound(uniqueOrderMonths) And endBLoop = False
+            
+                If uniqueOrderMonths(b) = moYr Then
+                    endBLoop = True
+                    addmoyr = False
+                End If
+                
+                b = b + 1
+            Wend
+            
+            If addmoyr = True Then
+                Call variantPush(uniqueOrderMonths, moYr)
+            End If
+
+        End If
+        
+        a = a + 1
+    Wend
+
+    Dim d As Integer: d = LBound(uniqueOrderMonths) 'for each unique ordermonth
+    While d <= UBound(uniqueOrderMonths)
+'MsgBox (2)
+        Dim split As Variant:  split = SplitBase1(uniqueOrderMonths(d), "|")
+        Dim orderDate As Date: orderDate = CDate(CStr(split(1) & "/1/" & split(2)))
+        
+        Dim path As String:   path = Me.getCsvPathFromDate(orderDate)
+        Dim data As Variant:  data = parse2dArrFromCsv(path)
+        Dim lines As Variant: lines = readTextFile(path)
+        Dim unchangedLines As Variant
+        Dim linesToChange As Variant
+        Dim changedLineIndices As Variant
+        
+        Dim headerRow As Variant: headerRow = isoRow_from_2dArr(data, 1, False)
+        Dim col As col: Set col = New col: Call col.constructor(headerRow)
+        
+        'MsgBox ("START CHANGE")
+        'UPDATE LINES TO BE CHANGED
+        Dim e, f, g As Integer
+        
+        f = LBound(ous)
+        While f <= UBound(ous)
+        
+            'MsgBox ("f" & f)
+        
+            Dim endELoop As Boolean: endELoop = False
+            e = UBound(data)
+            While e >= LBound(data) And endELoop = False
+            
+                'MsgBox ("f" & f & " e" & e)
+
+                If ous(f).po = data(e, col.re(COLRE_PO)) And _
+                   ous(f).sku = data(e, col.re(COLRE_SKU)) Then
+
+                    Call variantPush(linesToChange, e) 'only if unique
+                    
+                    Call variantPush(changedLineIndices, e)
+                    endELoop = True
+                    
+                    g = LBound(ous(f).colres)
+                    While g <= UBound(ous(f).colres)
+
+                        'MsgBox ("f" & f & " e" & e & " g" & g & "    ub " & UBound(ous(f).colres))
+                        Dim vals As Variant:        vals = ous(f).values
+                        Dim currentCols As Variant: currentCols = ous(f).colres
+
+                        Dim finalValue As String: finalValue = vals(g)
+                        finalValue = Replace(finalValue, vbNewLine, ",")
+                        finalValue = Replace(finalValue, vbLf, ",")
+                        finalValue = Replace(finalValue, vbCrLf, ",")
+                        finalValue = Replace(finalValue, vbCr, ",")
+                        
+                        data(e, col.re(CStr(currentCols(g)))) = finalValue
+                        
+                        g = g + 1
+                    Wend
+                End If
+                
+                e = e - 1
+            Wend
+
+            f = f + 1
+        Wend
+        
+        'SORT changedLines
+        a = LBound(changedLineIndices) + 1 'SORT lines BY ORDER DATE
+        While a <= UBound(changedLineIndices)
+            b = a: oob = False
+            While oob = False And changedLineIndices(b) < changedLineIndices(b - 1)
+                temp = changedLineIndices(b): changedLineIndices(b) = changedLineIndices(b - 1): changedLineIndices(b - 1) = temp
+                b = b - 1
+                If b = LBound(changedLineIndices) Then
+                    oob = True: b = LBound(changedLineIndices) + 1
+                End If
+            Wend
+            a = a + 1
+        Wend
+
+        'SEPERATE UNCHANGED LINES
+        e = LBound(data)
+        f = LBound(changedLineIndices)
+        
+        While e <= UBound(data)
+
+            If f <= UBound(changedLineIndices) Then
+                If e <> changedLineIndices(f) Then
+                    Call variantPush(unchangedLines, lines(e)) 'isoRow_from_2dArr(data, CInt(e), True))
+                Else
+                    f = f + 1
+                End If
+                
+            Else
+                Call variantPush(unchangedLines, lines(e)) 'isoRow_from_2dArr(data, CInt(e), True))
+            End If
+
+            e = e + 1
+        Wend
+
+        'write updated file
+        Call writeToTextFile(path, unchangedLines, True)
+
+        e = LBound(linesToChange)
+        While e <= UBound(linesToChange)
+            Dim lineIndex As Integer: lineIndex = linesToChange(e)
+            Dim changedLine As Variant: changedLine = isoRow_from_2dArr(data, lineIndex, True)
+            Call writeToCsvFile(path, changedLine, False)
+            e = e + 1
+        Wend
+'MsgBox (UBound(linesToChange))
+'MsgBox (UBound(unchangedLines))
+'MsgBox (UBound(data))
+'MsgBox (UBound(lines))
+'MsgBox (UBound(changedLineIndices))
+
+        Erase linesToChange
+        Erase unchangedLines
+        Erase data
+        Erase lines
+        Erase split
+        Erase changedLineIndices
+        
+        d = d + 1
+    Wend
+End Sub
+
+Public Function manifestToCreate(daysToCheck As Integer) As Variant
+
+    Dim manifests_noExistsChecks As Variant
+
+    Dim today As Date:       today = Date
+    Dim dateToCheck As Date: dateToCheck = DateSerial(Year(today), month(today), day(today) + daysToCheck)
+    
+    Dim c As Variant: Dim v As Variant: Dim q As Variant
+    Call variantPush(c, COLRE_BEST_SHIP_DATE): Call variantPush(v, today):       Call variantPush(q, ">=")
+    Call variantPush(c, COLRE_BEST_SHIP_DATE): Call variantPush(v, dateToCheck): Call variantPush(q, "<=")
+    Call variantPush(c, COLRE_STATUS):         Call variantPush(v, "canceled"):  Call variantPush(q, "<>")
+    Dim orders As Variant: orders = Me.getOrders(c, v, q)
+    
+    Dim bestShipDates As Variant
+    Dim shipFromWarehouses As Variant
+             
+    If isVariantArrayInit(orders) = True Then
+
+        Dim i As Integer
+        
+        i = LBound(orders)
+        While i <= UBound(orders)
+
+            Dim order As order: Set order = orders(i)
+            Dim bsd As Date:    bsd = order.bestShipDate
+            Dim sfw As String:  sfw = order.shipFromWarehouse
+
+            Dim u As Integer
+            
+            Dim bsdIsUnique As Boolean: bsdIsUnique = True
+            If isVariantArrayInit(bestShipDates) = True Then
+            
+                u = LBound(bestShipDates)
+                While bsdIsUnique = True And u <= UBound(bestShipDates)
+            
+                    If bsd = bestShipDates(u) Then
+                        bsdIsUnique = False
+                    End If
+                
+                    u = u + 1
+                Wend
+            End If
+  
+            Dim sfwIsUnique As Boolean: sfwIsUnique = True
+            If isVariantArrayInit(shipFromWarehouses) = True Then
+            
+                u = LBound(shipFromWarehouses)
+                While sfwIsUnique = True And u <= UBound(shipFromWarehouses)
+            
+                    If sfw = shipFromWarehouses(u) Then
+                        sfwIsUnique = False
+                    End If
+                
+                    u = u + 1
+                Wend
+            End If
+ 
+            If bsdIsUnique = True Or sfwIsUnique = True Then
+                Call variantPush(manifests_noExistsChecks, Format(bsd, "MM-DD-YYYY") & "," & sfw)
+                Call variantPush(bestShipDates, bsd)
+                Call variantPush(shipFromWarehouses, sfw)
+            End If
+            
+            i = i + 1
+        Wend
+    End If
+
+    If isVariantArrayInit(manifests_noExistsChecks) = True Then
+    
+        Dim s As Integer: s = LBound(manifests_noExistsChecks)
+        While s <= UBound(manifests_noExistsChecks)
+        
+            Dim t As Integer: t = s
+            While t <= UBound(manifests_noExistsChecks)
+            
+                If manifests_noExistsChecks(s) >= manifests_noExistsChecks(t) Then
+                
+                    Dim temp As String: temp = manifests_noExistsChecks(s)
+                    manifests_noExistsChecks(s) = manifests_noExistsChecks(t)
+                    manifests_noExistsChecks(t) = temp
+                End If
+                
+                t = t + 1
+            Wend
+            
+            s = s + 1
+        Wend
+    End If
+    
+    manifestToCreate = manifests_noExistsChecks
+End Function
+
+Public Function lookupIfShipDateExists(shipDate As Date) As Variant
+    Dim c As Variant: Dim v As Variant: Dim q As Variant
+    Call variantPush(c, COLRE_STATUS):         Call variantPush(v, "canceled"): Call variantPush(q, "<>")
+    Call variantPush(c, COLRE_BEST_SHIP_DATE): Call variantPush(v, shipDate):   Call variantPush(q, "=")
+    Dim shipDateExists As Variant: shipDateExists = Me.getOrders(c, v, q)
+    
+    If isVariantArrayInit(shipDateExists) = True Then
+        lookupIfShipDateExists = True
+    Else
+        lookupIfShipDateExists = False
+    End If
+End Function
+
+'----------------------------------------------------
+'--- PUBLIC METHODS (getOrder Presets)
+'----------------------------------------------------
+
+Public Function getOpenAndBackOrders() As Variant
+    Dim c As Variant: Dim v As Variant: Dim q As Variant
+    
+    Call variantPush(c, COLRE_STATUS)
+    
+    Dim v1 As Variant: Dim q1 As Variant
+    Call variantPush(v1, "open order"): Call variantPush(q1, "=")
+    Call variantPush(v1, "back order"): Call variantPush(q1, "=")
+    Call variantPush(v, v1):            Call variantPush(q, q1)
+
+    Dim orders As Variant: orders = Me.getOrders(c, v, q)
+    getOpenAndBackOrders = orders
+End Function
+
+Public Function getOpenOrders() As Variant
+    Dim c As Variant: Dim v As Variant: Dim q As Variant
+    Call variantPush(c, COLRE_STATUS):         Call variantPush(v, "open order"):  Call variantPush(q, "=")
+    Dim orders As Variant: orders = Me.getOrders(c, v, q)
+    getOpenOrders = orders
+End Function
+
+Public Function getLateOrders() As Variant
+    Dim c As Variant: Dim v As Variant: Dim q As Variant
+    Call variantPush(c, COLRE_STATUS):           Call variantPush(v, "late"): Call variantPush(q, "=")
+    Dim orders As Variant: orders = Me.getOrders(c, v, q)
+    getLateOrders = orders
+End Function
+
+Public Function getBackOrders() As Variant
+    Dim c As Variant: Dim v As Variant: Dim q As Variant
+    Call variantPush(c, COLRE_STATUS):         Call variantPush(v, "back order"): Call variantPush(q, "=")
+    Dim orders As Variant: orders = Me.getOrders(c, v, q)
+    getBackOrders = orders
+End Function
+
+Public Function getTodaysOrders() As Variant
+    'cols/parameters  'value           'qualifier
+    Dim c As Variant: Dim v As Variant: Dim q As Variant
+
+    Dim today As Date: today = Date
+    
+    Call variantPush(c, COLRE_STATUS):     Call variantPush(v, "canceled"): Call variantPush(q, "<>")
+    Call variantPush(c, COLRE_ORDER_DATE): Call variantPush(v, today):      Call variantPush(q, "=") 'ordered today
+
+    Dim orders As Variant: orders = Me.getOrders(c, v, q)
+    getTodaysOrders = orders
+End Function
+
+Public Function getOrdersByShipDate(dt As Date) As Variant
+    'cols/parameters  'value           'qualifier
+    Dim c As Variant: Dim v As Variant: Dim q As Variant
+    Call variantPush(c, COLRE_STATUS):         Call variantPush(v, "canceled"): Call variantPush(q, "<>")
+    Call variantPush(c, COLRE_BEST_SHIP_DATE): Call variantPush(v, dt):         Call variantPush(q, "=") 'ordered today
+    Dim orders As Variant: orders = Me.getOrders(c, v, q)
+    getOrdersByShipDate = orders
+End Function
+
+Public Function simpleOrderSearchFromVariant(param As String, values As Variant, Optional qualifier As String = "=") As Variant
+    'cols/parameters  'value           'qualifier
+    Dim c As Variant: Dim v As Variant: Dim q As Variant
+
+    Dim paraToPush As String:
+    If param = "arn" Then paraToPush = COLRE_ARN
+    If param = "po" Then paraToPush = COLRE_PO
+    If param = "sku" Then paraToPush = COLRE_SKU
+
+    Dim x As Integer: x = 1
+    While x <= UBound(values)
+         Call variantPush(c, paraToPush): Call variantPush(v, values(x)): Call variantPush(q, qualifier) 'ordered today
+    Wend
+
+    Dim orders As Variant: orders = Me.getOrders(c, v, q)
+    simpleOrderSearchFromVariant = orders
+End Function
+
+Public Function simpleOrderSearchFromStr(param As String, values As String, Optional qualifier As String = "=", Optional delimeter As String = ",") As Variant
+    'cols/parameters  'value           'qualifier
+    Dim c As Variant: Dim v As Variant: Dim q As Variant
+
+    Dim paraToPush As String:
+    If param = "arn" Then paraToPush = COLRE_ARN
+    If param = "po" Then paraToPush = COLRE_PO
+    If param = "sku" Then paraToPush = COLRE_SKU
+
+    If InStr(values, delimeter) > 0 Then
+        Dim valuesArr As Variant: valuesArr = SplitBase1(values, delimeter)
+        Dim x As Integer: x = 1
+        While x <= UBound(valuesArr)
+             Call variantPush(c, paraToPush): Call variantPush(v, valuesArr(x)): Call variantPush(q, qualifier) 'ordered today
+        Wend
+    Else
+         Call variantPush(c, paraToPush): Call variantPush(v, values): Call variantPush(q, qualifier) 'ordered today
+    End If
+
+    Dim orders As Variant: orders = Me.getOrders(c, v, q)
+    simpleOrderSearchFromStr = orders
+End Function
+
+
+'----------------------------------------------------
+'--- GET/LET/SET
+'----------------------------------------------------
+Public Property Let archiveFolderPath(archiveFolderPath As String): m_archiveFolderPath = archiveFolderPath: End Property
+Public Property Get archiveFolderPath() As String: archiveFolderPath = m_archiveFolderPath: End Property
+
+
