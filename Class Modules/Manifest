@@ -1,0 +1,636 @@
+'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Class: Manifest
+
+'--- FIELDS
+
+'--- CONSTRUCTOR
+'Public Sub constructorDt(shipDate As Date, shipFromWarehouse As String, Optional addNewIfItDoesntExist As Boolean = False)
+'Public Sub constructorStr(manifestName As String, shipFromWarehouse As String, Optional addNewIfItDoesntExist As Boolean = False)
+
+'--- METHODS
+'Public Sub addNew(Optional name As String = "")
+'Public Sub addOrders()
+'Public Sub format_AssignIds_updateArchive
+'Public Sub getRRinfo_assignCarrierInfo_updateArchive
+'Public Sub adjust()
+'Public Sub schedShipTimes()
+
+'--- GET/LET/SET
+
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+'--- OPTIONS
+Option Explicit
+Option Base 1
+
+
+'----------------------------------------------------
+'--- FIELDS
+'----------------------------------------------------
+
+Private m_name As String
+Private m_ws As Worksheet
+Private m_shipDate As Date
+Private m_shipFromWarehouse As String
+
+
+'----------------------------------------------------
+'--- CONSTRUCTOR
+'----------------------------------------------------
+
+Public Sub constructorDt(shipDate As Date, shipFromWarehouse As String, Optional addNewIfItDoesntExist As Boolean = False)
+ 
+    Dim shipDateFormatted As String: shipDateFormatted = Format(shipDate, "yymmdd")
+    m_shipFromWarehouse = shipFromWarehouse
+    m_name = shipDateFormatted & " " & shipFromWarehouse
+
+    m_shipDate = shipDate
+    If wsExists(name) = True Then
+        Set m_ws = ActiveWorkbook.Sheets(m_name)
+    ElseIf wsExists(name) = False And addNewIfItDoesntExist = True Then
+        addNew (name)
+    End If
+End Sub
+
+Public Sub constructorStr(manifestName As String, shipFromWarehouse As String, Optional addNewIfItDoesntExist As Boolean = False)
+    m_name = manifestName & " " & shipFromWarehouse
+
+    Dim yr As String: yr = Left(manifestName, 2)
+    Dim mo As String: mo = Right(Left(manifestName, 4), 2)
+    Dim dy As String: dy = Right(manifestName, 2)
+    Dim dateStr As String: dateStr = mo & "/" & dy & "/" & yr
+    Dim shipDate As Date:  shipDate = CDate(dateStr)
+    m_shipDate = shipDate
+    m_shipFromWarehouse = shipFromWarehouse
+    
+    If wsExists(name) = True Then
+        Set m_ws = ActiveWorkbook.Sheets(m_name)
+    ElseIf wsExists(name) = False And addNewIfItDoesntExist = True Then
+        addNew (name)
+    End If
+End Sub
+
+
+'----------------------------------------------------
+'--- METHODS
+'----------------------------------------------------
+Public Sub addNew(Optional name As String = "")
+    If name = "" Then name = m_name
+    
+    Dim wsName As String: wsName = copySheet(WS_NAME_MANIFEST_TEMPLATE, name, WS_NAME_HIDDEN_DIVIDER_MANIFEST)
+    m_name = wsName
+    Set ws = ActiveWorkbook.Sheets(wsName)
+End Sub
+
+Public Sub addOrders()
+
+    Dim archive As archive: Set archive = New archive: Call archive.constructor
+
+    Dim c As Variant: Dim v As Variant: Dim q As Variant
+    Call variantPush(c, COLRE_STATUS):              Call variantPush(v, "canceled"):          Call variantPush(q, "<>")
+    Call variantPush(c, COLRE_BEST_SHIP_DATE):      Call variantPush(v, m_shipDate):          Call variantPush(q, "=")
+    Call variantPush(c, COLRE_SHIP_FROM_WAREHOUSE): Call variantPush(v, m_shipFromWarehouse): Call variantPush(q, "=")
+    
+    Dim orders As Variant: orders = archive.getOrders(c, v, q)
+
+    'add orders to the new manifest
+    Dim manifestShipDate As String: manifestShipDate = ""
+    manifestShipDate = manifestShipDate & Format(m_shipDate, "mm/dd/yy ")
+    manifestShipDate = manifestShipDate & WEEKDAYS(weekday(shipDate), True)
+    manifestShipDate = manifestShipDate & " (" & m_shipFromWarehouse & ")"
+    Call setValue(m_name, "Ship Date: " & manifestShipDate, WS_MANIFEST_FRAME_ROW, WS_MANIFEST_LASTVISIBLE_COL)
+    m_ws.Cells(WS_MANIFEST_FRAME_ROW, WS_MANIFEST_LASTVISIBLE_COL).HorizontalAlignment = xlRight
+
+    Call sortOrders(orders, "expected quantity", "desc")
+    Call sortOrders(orders, "sku", "desc")
+    Call sortOrders(orders, "shipToLocation", "desc")
+
+    Dim sortedShipments() As Variant
+    Call sortOrderForManifest(orders, sortedShipments)
+
+    Dim a As Integer: a = LBound(sortedShipments)
+    Dim x As Integer: x = WS_MANIFEST_FIRST_ROW
+
+    Application.ScreenUpdating = False
+    While a <= UBound(sortedShipments)
+        Call pasteOrders(m_name, sortedShipments(a).orders, x, WS_MANIFEST_HEADER_ROW)
+        x = x + UBound(sortedShipments(a).orders)
+        a = a + 1
+    Wend
+    Application.ScreenUpdating = True
+    
+End Sub
+
+Public Sub format_AssignIds_updateArchive()
+    Application.DisplayAlerts = False
+    Application.ScreenUpdating = False
+
+    'get values on sheet
+    Dim data As Variant: data = getValues(m_name, 1, 1, 0, 0)
+    Dim manifestCols As Integer: manifestCols = UBound(data, 2)
+
+    'turn into shipments
+    Dim shipments As Variant
+    Dim headerRow As Variant: headerRow = isoRow_from_2dArr(data, WS_MANIFEST_HEADER_ROW, False)
+    Dim col As col: Set col = New col: Call col.constructor(headerRow)
+
+    Dim i As Integer: i = WS_MANIFEST_FIRST_ROW
+    Dim s As Integer: s = 1
+
+    Dim dudRow As Boolean: dudRow = False
+    
+    While i <= UBound(data, 1)
+
+        Dim orders As Variant
+        Dim currShipToLoc As String: currShipToLoc = data(i, col.re(COLRE_SHIPTOLOC))
+
+        Dim isLTL As Boolean
+        If data(i, col.re(COLRE_PALLETS)) = 0 Then
+            isLTL = False
+        Else
+            isLTL = True
+        End If
+
+        Dim g As Integer: g = i
+        Dim j As Integer: j = 0
+        Dim contLoop As Boolean: contLoop = True
+        Dim cumulativeWeight As Double: cumulativeWeight = 0
+
+        While g <= UBound(data, 1) And _
+              contLoop = True
+
+            If (data(g, col.re(COLRE_SHIPTOLOC)) = currShipToLoc Or data(g, col.re(COLRE_SHIPTOLOC)) = "") And _
+               (data(g, col.re(COLRE_PO)) <> "" And data(g, col.re(COLRE_SKU)) <> "") And _
+                 ((isLTL = True And data(g, col.re(COLRE_PALLETS)) >= 1) Or _
+                  (isLTL = False And data(g, col.re(COLRE_PALLETS)) = 0) Or _
+                  (isLTL = True And data(i, col.re(COLRE_TOTAL_WEIGHT)) >= PALLET_PAYLOAD_WEIGHT_THRESHOLD) Or _
+                  (isLTL = False And data(i, col.re(COLRE_TOTAL_WEIGHT)) < PALLET_PAYLOAD_WEIGHT_THRESHOLD)) Then
+            
+                Dim dataRow As Variant: dataRow = isoRow_from_2dArr(data, g)
+                Dim order As order: Set order = New order: Call order.constructor(dataRow, headerRow)
+                Call variantPush(orders, order)
+                
+                cumulativeWeight = cumulativeWeight + order.weight
+                g = g + 1
+                j = j + 1
+            Else
+                contLoop = False
+                
+                'if a dud row, then skip
+                If data(g, col.re(COLRE_PO)) = "" Or _
+                   data(g, col.re(COLRE_SKU)) = "" Or _
+                   data(g, col.re(COLRE_ORDER_DATE)) = "" Then
+                    g = g + 1
+                    i = i + 1
+                    dudRow = True
+                End If
+            End If
+        Wend
+        
+        If dudRow = False Then
+            Dim shipment As shipment
+            If data(i, col.re(COLRE_SHIPMENT_REF_ID)) = "" Then
+                Set shipment = New shipment: Call shipment.constructor(orders, CStr(m_shipDate), True, i - (WS_MANIFEST_FIRST_ROW - 1))
+            Else
+                Set shipment = New shipment: Call shipment.constructor(orders, CStr(m_shipDate), False)
+            End If
+        
+            Call variantPush(shipments, shipment)
+        End If
+
+        Erase orders
+
+        If j = 0 Then
+            i = i + 1
+        Else
+            i = i + j
+        End If
+
+        s = s + 1
+    Wend
+
+    'paste ids on manifest and format manifest
+    Dim archive As archive: Set archive = New archive: Call archive.constructor
+    
+    Dim poPageLink As String:  poPageLink = "https://vendorcentral.amazon.com/po/vendor/members/po-mgmt/order?poId="
+    Dim arnPageLink As String: arnPageLink = "https://vendorcentral.amazon.com/kt/vendor/members/afi-shipment-mgr/shipmentdetail?rr="
+
+    Dim colrePo As Integer:        colrePo = col.re(COLRE_PO)
+    Dim colreSku As Integer:       colreSku = col.re(COLRE_SKU)
+    Dim colreOrderDate As Integer: colreOrderDate = col.re(COLRE_ORDER_DATE)
+
+    s = LBound(shipments)
+    i = WS_MANIFEST_FIRST_ROW
+
+    While s <= UBound(shipments)
+
+        Dim shipmentRefId As String: shipmentRefId = shipments(s).shipmentRefId
+        Dim invoiceId As String:     invoiceId = shipments(s).invoiceId
+        
+        Dim totalPallets As Integer: totalPallets = 0
+        
+        Dim ordersInShipment As Integer: ordersInShipment = UBound(shipments(s).orders)
+        Dim initialRow As Integer:       initialRow = i
+        Dim lastRow As Integer:          lastRow = (initialRow + ordersInShipment) - 1
+
+        m_ws.Cells(initialRow, col.re(COLRE_ARN_PAGE)) = "=hyperlink(" & DBLQT & arnPageLink & DBLQT & " & " & ALPHABET(col.re(COLRE_ARN)) & i & ")"
+
+        j = i
+        While j <= lastRow
+
+          
+            Dim currPo As String:      currPo = m_ws.Cells(j, colrePo)
+            Dim currSku As String:     currSku = m_ws.Cells(j, colreSku)
+            Dim currOrderDate As Date: currOrderDate = CDate(m_ws.Cells(j, colreOrderDate))
+
+            m_ws.Cells(j, col.re(COLRE_PO_PAGE)) = "=hyperlink(" & DBLQT & poPageLink & DBLQT & " & " & ALPHABET(col.re(COLRE_PO)) & j & ")"
+
+            If m_ws.Cells(j, col.re(COLRE_SHIPMENT_REF_ID)) = "" Then 'only do this if empty
+                m_ws.Cells(j, col.re(COLRE_SHIPMENT_REF_ID)) = shipmentRefId
+                Call archive.updateSingleOrder(currPo, currSku, currOrderDate, COLRE_SHIPMENT_REF_ID, shipmentRefId)
+            End If
+
+            If m_ws.Cells(j, col.re(COLRE_INVOICE_ID)) = "" Then 'only do this if empty
+                m_ws.Cells(j, col.re(COLRE_INVOICE_ID)) = invoiceId
+                Call archive.updateSingleOrder(currPo, currSku, currOrderDate, COLRE_INVOICE_ID, invoiceId)
+            End If
+
+            totalPallets = totalPallets + CInt(m_ws.Cells(j, col.re(COLRE_PALLETS)))
+
+            j = j + 1
+        Wend
+
+        Dim z As Integer: z = LBound(shipments(s).orders)
+        While z <= UBound(shipments(s).orders)
+            
+            If UBound(shipments(s).orders) > 1 And z = 1 Then
+             
+                m_ws.Cells(i, col.re(COLRE_SHIPMENT_REF_ID)) = shipmentRefId
+                m_ws.Cells(i, col.re(COLRE_INVOICE_ID)) = invoiceId
+            
+                Dim c As Integer
+                c = col.re(COLRE_SHIP_TO_COUNTRY):   m_ws.Range(Cells(initialRow, c), Cells(lastRow, c)).Merge
+                c = col.re(COLRE_CARRIER):           m_ws.Range(Cells(initialRow, c), Cells(lastRow, c)).Merge
+                c = col.re(COLRE_ARN):               m_ws.Range(Cells(initialRow, c), Cells(lastRow, c)).Merge
+                c = col.re(COLRE_SHIPTOLOC):         m_ws.Range(Cells(initialRow, c), Cells(lastRow, c)).Merge
+                c = col.re(COLRE_SHIPMENT_REF_ID):   m_ws.Range(Cells(initialRow, c), Cells(lastRow, c)).Merge
+                c = col.re(COLRE_INVOICE_ID):        m_ws.Range(Cells(initialRow, c), Cells(lastRow, c)).Merge
+                c = col.re(COLRE_SCAC):              m_ws.Range(Cells(initialRow, c), Cells(lastRow, c)).Merge
+                c = col.re(COLRE_SHIP_TO_COUNTRY):   m_ws.Range(Cells(initialRow, c), Cells(lastRow, c)).Merge
+                c = col.re(COLRE_ACTUAL_SHIP_DATE):  m_ws.Range(Cells(initialRow, c), Cells(lastRow, c)).Merge
+                c = col.re(COLRE_ASN_ID):            m_ws.Range(Cells(initialRow, c), Cells(lastRow, c)).Merge
+                c = col.re(COLRE_INVOICE_SUBMITTED): m_ws.Range(Cells(initialRow, c), Cells(lastRow, c)).Merge
+                c = col.re(COLRE_ARN_PAGE):          m_ws.Range(Cells(initialRow, c), Cells(lastRow, c)).Merge
+            
+                c = col.re(COLRE_SCHED_SHIP_DATE):   m_ws.Range(Cells(initialRow, c), Cells(lastRow, c)).Merge
+            
+            
+                c = col.re(COLRE_SHIPMENT_PALLETS):           m_ws.Range(Cells(initialRow, c), Cells(lastRow, c)).Merge
+
+                m_ws.Cells(initialRow, c) = shipments(s).totalPallets
+
+            End If
+
+            Dim currShipment As shipment: Set currShipment = shipments(s)
+            Dim currOrder As order: Set currOrder = currShipment.orders(z)
+            
+            currPo = currOrder.po
+            currSku = currOrder.sku
+            currOrderDate = CDate(currOrder.orderDate)
+
+            Call archive.updateSingleOrder(currPo, currSku, currOrderDate, COLRE_PALLETS, currOrder.pallets) 'currOrder.pallets) '
+            Call archive.updateSingleOrder(currPo, currSku, currOrderDate, COLRE_SHIPMENT_PALLETS, shipments(s).totalPallets) 'currShipment.totalPallets)
+            
+            z = z + 1
+        Wend
+ 
+     
+        If s Mod 2 = 0 Then
+            m_ws.Range(Cells(initialRow, 1), Cells(lastRow, manifestCols)).Interior.ColorIndex = 15 'bg color light grey
+        Else
+            m_ws.Range(Cells(initialRow, 1), Cells(lastRow, manifestCols)).Interior.ColorIndex = 0 'bg color no fill
+        End If
+
+        i = i + ordersInShipment
+        s = s + 1
+    Wend
+
+    Application.DisplayAlerts = True
+    Application.ScreenUpdating = True
+End Sub
+
+Public Sub getRRinfo_assignCarrierInfo_updateArchive()
+
+    Dim data As Variant: data = getValues(m_name, 1, 1, 0, 0)
+    Dim headerRow As Variant: headerRow = isoRow_from_2dArr(data, WS_MANIFEST_HEADER_ROW, False)
+
+    Dim col As col: Set col = New col: Call col.constructor(headerRow)
+    
+    Dim colArn As Integer:     colArn = col.re(COLRE_ARN)
+    Dim colScac As Integer:    colScac = col.re(COLRE_SCAC)
+    Dim colCarrier As Integer: colCarrier = col.re(COLRE_CARRIER)
+    
+    Dim colrePo As Integer:        colrePo = col.re(COLRE_PO)
+    Dim colreSku As Integer:       colreSku = col.re(COLRE_SKU)
+    Dim colreOrderDate As Integer: colreOrderDate = col.re(COLRE_ORDER_DATE)
+    
+    Dim colreShipmentRefId As Integer: colreShipmentRefId = col.re(COLRE_SHIPMENT_REF_ID)
+    Dim colreShipToLoc As Integer:     colreShipToLoc = col.re(COLRE_SHIPTOLOC)
+    
+    Dim rrData As Variant: rrData = getValues(WS_NAME_RRLOG, 1, 1, WS_RRLOG_MAX_ROW, 0)
+    Dim carrierData As Variant: carrierData = getValues(WS_NAME_CARRIERS, 1, 1, 0, 0)
+
+    Dim archive As archive: Set archive = New archive: Call archive.constructor
+
+    Dim arn As String
+    Dim x As Integer: x = WS_MANIFEST_FIRST_ROW
+    
+    While x <= UBound(data) 'for each shipment in manifest
+
+        'IF ARN FOUND
+        If data(x, colArn) <> "" Then
+            arn = data(x, colArn)
+            
+            Dim ogArn As String: ogArn = data(x, colArn)
+            Dim ogShipRefId As String: ogShipRefId = data(x, colreShipmentRefId)
+            Dim ogShipToLoc As String: ogShipToLoc = data(x, colreShipToLoc)
+
+            Dim endInnerLoop As Boolean: endInnerLoop = False
+            
+            While x <= UBound(data) And endInnerLoop = False
+
+                If (m_ws.Cells(x, colArn) = ogArn Or m_ws.Cells(x, colArn) = "") And _
+                   (m_ws.Cells(x, colreShipmentRefId) = ogShipRefId Or m_ws.Cells(x, colreShipmentRefId) = "") And _
+                   (m_ws.Cells(x, colreShipToLoc) = ogShipToLoc Or m_ws.Cells(x, colreShipToLoc) = "") Then
+
+                    Dim po As String: po = data(x, colrePo)
+                    Dim sku As String: sku = data(x, colreSku)
+                    
+                    If po <> "" And sku <> "" Then
+                        Dim currPo As String:      currPo = m_ws.Cells(x, colrePo)
+                        Dim currSku As String:     currSku = m_ws.Cells(x, colreSku)
+                        Dim currOrderDate As Date: currOrderDate = CDate(m_ws.Cells(x, colreOrderDate))
+                        
+                        Dim scac As String: scac = ""
+                        scac = vLookup(arn, rrData, WS_RRLOG_COL_SCAC)
+                        If scac <> "" And scac <> m_ws.Cells(x, colScac) Then
+                            Call archive.updateSingleOrder(currPo, currSku, currOrderDate, COLRE_SCAC, scac)
+                            m_ws.Cells(x, colScac) = scac
+                        End If
+  
+                        Dim carrier As String: carrier = ""
+                        carrier = vLookup(scac, carrierData, WS_CARRIERS_COL_DISPLAY_NAME)
+                        If carrier <> "" And carrier <> m_ws.Cells(x, colCarrier) Then
+                            Call archive.updateSingleOrder(currPo, currSku, currOrderDate, COLRE_CARRIER, carrier)
+                            m_ws.Cells(x, colCarrier) = carrier
+                        End If
+                        
+                        If m_ws.Cells(x, colArn) = "" Then
+                            Call archive.updateSingleOrder(currPo, currSku, currOrderDate, COLRE_ARN, arn)
+                        End If
+                    End If
+                    x = x + 1
+                Else
+                    endInnerLoop = True
+                End If
+            Wend
+        Else
+            x = x + 1
+        End If
+    Wend
+End Sub
+
+Public Sub adjust()
+
+    Dim archive As archive: Set archive = New archive: Call archive.constructor
+
+    Dim shipments() As Variant
+    Call sortShipmentsForAdjustment(m_name, shipments)
+
+    'DELETE ROWS
+    Dim data As Variant: data = getValues(m_name, 1, 1, 0, 0)
+    Dim manifestCols As Integer: manifestCols = UBound(data, 2)
+    Dim headerRow As Variant: headerRow = isoRow_from_2dArr(data, WS_MANIFEST_HEADER_ROW, False)
+
+    Dim col As col: Set col = New col: Call col.constructor(headerRow)
+    Dim rows As Integer: rows = UBound(data, 1)
+    m_ws.Range("A" & WS_MANIFEST_FIRST_ROW & ":A" & rows).EntireRow().Delete 'Shift:=xlToUp
+
+    'PASTE ORDERS
+    Dim s As Integer: s = LBound(shipments)
+    Dim i As Integer: i = WS_MANIFEST_FIRST_ROW
+    
+    Dim totalLooseQuantity As Integer: totalLooseQuantity = 0
+    Dim totalPallets As Integer:       totalPallets = 0
+    
+    Application.DisplayAlerts = False
+    
+    Dim mergeShippingInfo As Boolean: mergeShippingInfo = False
+
+    Dim poPageLink As String:  poPageLink = "https://vendorcentral.amazon.com/po/vendor/members/po-mgmt/order?poId="
+    Dim arnPageLink As String: arnPageLink = "https://vendorcentral.amazon.com/kt/vendor/members/afi-shipment-mgr/shipmentdetail?rr="
+
+    While s <= UBound(shipments)
+    
+        Dim ordersInShipment As Integer: ordersInShipment = UBound(shipments(s).orders)
+        Dim initialRow As Integer:       initialRow = i
+        Dim lastRow As Integer:          lastRow = (initialRow + ordersInShipment) - 1
+
+        Dim totalShipmentPallets As Integer: totalShipmentPallets = 0
+
+        Dim shipment As shipment:
+        Set shipment = shipments(s)
+
+        If shipments(s).totalPallets >= 1 And _
+           (shipments(s).scac = "UPSN" Or shipments(s).scac = "EMSY") Then
+
+            Dim o As Integer: o = LBound(shipment.orders)
+            While o <= UBound(shipment.orders)
+
+                Dim order As order
+                Set order = shipment.orders(o)
+
+                order.pallets = 0
+                order.palletsInShipment = 0
+                order.shippingInfo = "Turn into Small Parcel"
+                
+                Call archive.updateSingleOrder(order.po, order.sku, order.orderDate, COLRE_PALLETS, 0)
+                Call archive.updateSingleOrder(order.po, order.sku, order.orderDate, COLRE_SHIPMENT_PALLETS, 0)
+                Call archive.updateSingleOrder(order.po, order.sku, order.orderDate, COLRE_SHIPPING_INFO, "Turn into Small Parcel")
+                o = o + 1
+            Wend
+
+            shipment.totalPallets = 0
+            
+            mergeShippingInfo = True
+        End If
+
+        Call pasteOrders(m_name, shipments(s).orders, i, WS_MANIFEST_HEADER_ROW)
+
+        m_ws.Cells(initialRow, col.re(COLRE_ARN_PAGE)) = "=hyperlink(" & DBLQT & arnPageLink & DBLQT & " & " & ALPHABET(col.re(COLRE_ARN)) & i & ")"
+
+        Dim j As Integer: j = i
+        While j <= lastRow
+            m_ws.Cells(j, col.re(COLRE_PO_PAGE)) = "=hyperlink(" & DBLQT & poPageLink & DBLQT & " & " & ALPHABET(col.re(COLRE_PO)) & j & ")"
+            totalShipmentPallets = totalShipmentPallets + CInt(m_ws.Cells(j, col.re(COLRE_PALLETS)))
+            j = j + 1
+        Wend
+
+        If UBound(shipments(s).orders) > 1 Then
+
+            Dim c As Integer
+            c = col.re(COLRE_SHIP_TO_COUNTRY):   m_ws.Range(Cells(initialRow, c), Cells(lastRow, c)).Merge
+            c = col.re(COLRE_CARRIER):           m_ws.Range(Cells(initialRow, c), Cells(lastRow, c)).Merge
+            c = col.re(COLRE_ARN):               m_ws.Range(Cells(initialRow, c), Cells(lastRow, c)).Merge
+            c = col.re(COLRE_SHIPTOLOC):         m_ws.Range(Cells(initialRow, c), Cells(lastRow, c)).Merge
+            c = col.re(COLRE_SHIPMENT_REF_ID):   m_ws.Range(Cells(initialRow, c), Cells(lastRow, c)).Merge
+            c = col.re(COLRE_INVOICE_ID):        m_ws.Range(Cells(initialRow, c), Cells(lastRow, c)).Merge
+            c = col.re(COLRE_SCAC):              m_ws.Range(Cells(initialRow, c), Cells(lastRow, c)).Merge
+            c = col.re(COLRE_SHIP_TO_COUNTRY):   m_ws.Range(Cells(initialRow, c), Cells(lastRow, c)).Merge
+            c = col.re(COLRE_ACTUAL_SHIP_DATE):  m_ws.Range(Cells(initialRow, c), Cells(lastRow, c)).Merge
+            c = col.re(COLRE_ASN_ID):            m_ws.Range(Cells(initialRow, c), Cells(lastRow, c)).Merge
+            c = col.re(COLRE_INVOICE_SUBMITTED): m_ws.Range(Cells(initialRow, c), Cells(lastRow, c)).Merge
+            c = col.re(COLRE_ARN_PAGE):          m_ws.Range(Cells(initialRow, c), Cells(lastRow, c)).Merge
+            
+            c = col.re(COLRE_SCHED_SHIP_DATE):   m_ws.Range(Cells(initialRow, c), Cells(lastRow, c)).Merge
+            c = col.re(COLRE_SHIPMENT_PALLETS):  m_ws.Range(Cells(initialRow, c), Cells(lastRow, c)).Merge
+            
+            If m_ws.Cells(initialRow, col.re(COLRE_SHIPPING_INFO)) = "Turn into Small Parcel" Then
+                m_ws.Cells(initialRow, c) = 0
+            Else
+                m_ws.Cells(initialRow, c) = totalShipmentPallets
+            End If
+
+            If mergeShippingInfo = True Then
+                c = col.re(COLRE_SHIPPING_INFO): m_ws.Range(Cells(initialRow, c), Cells(lastRow, c)).Merge
+            End If
+
+        End If
+        
+        If s Mod 2 = 0 Then
+            m_ws.Range(Cells(initialRow, 1), Cells(lastRow, manifestCols)).Interior.ColorIndex = 15 'bg color light grey
+        End If
+
+        'ADD TOTAL ROWS
+        Dim rowsInserted As Integer: rowsInserted = 0
+        Dim insertRow As Boolean:    insertRow = False
+
+        If shipments(s).totalPallets = 0 Then
+            totalLooseQuantity = totalLooseQuantity + shipments(s).totalCartons
+        End If
+        totalPallets = totalPallets + shipments(s).totalPallets
+
+        'if next shipment's carrier is differnt or if this is the last index
+        If s = UBound(shipments) Then
+            insertRow = True
+        Else
+            If shipments(s).carrier <> shipments(s + 1).carrier Then
+                 insertRow = True
+            End If
+        End If
+        
+        If insertRow = True Then
+        
+            Dim totalRowInsertIndex As Integer: totalRowInsertIndex = i + ordersInShipment + 1
+            Dim totalRowIndex As Integer:       totalRowIndex = i + ordersInShipment
+            
+            m_ws.rows(totalRowInsertIndex).Insert
+            rowsInserted = rowsInserted + 1
+            
+            Dim totalRowCarrier As String: totalRowCarrier = shipments(s).carrier
+            Dim totalRowPallets As String: totalRowPallets = totalPallets & " pallets"
+            Dim totalRowCartons As String: totalRowCartons = "(" & totalLooseQuantity & " cartons)"
+            
+            m_ws.Cells(totalRowIndex, 1) = totalRowCarrier
+            
+            If totalPallets > 0 Then
+                m_ws.Cells(totalRowIndex, 2) = totalRowPallets
+            End If
+            
+            If totalLooseQuantity > 0 Then
+                m_ws.Cells(totalRowIndex, 3) = totalRowCartons
+            End If
+            
+            'm_ws.Cells(totalRowIndex, 1) = totalRowStr
+
+            m_ws.Range(Cells(totalRowIndex, 1), Cells(totalRowIndex, manifestCols)).Interior.ColorIndex = 1 'bg color black
+            m_ws.Range(Cells(totalRowIndex, 1), Cells(totalRowIndex, manifestCols)).borders(xlInsideVertical).LineStyle = xlThin
+            m_ws.Range(Cells(totalRowIndex, 1), Cells(totalRowIndex, manifestCols)).borders(xlInsideVertical).Color = RGB(0, 0, 0)
+            m_ws.Range(Cells(totalRowIndex, 1), Cells(totalRowIndex, manifestCols)).borders(xlInsideVertical).LineStyle = xlContinuous
+            
+            m_ws.Range(Cells(totalRowIndex, 1), Cells(totalRowIndex, manifestCols)).Font.Color = vbWhite
+            m_ws.Range(Cells(totalRowIndex, 1), Cells(totalRowIndex, 2)).Font.Bold = True
+            m_ws.Range(Cells(totalRowIndex, 3), Cells(totalRowIndex, 4)).Font.Italic = True
+            m_ws.Range(Cells(totalRowIndex, 1), Cells(totalRowIndex, manifestCols)).HorizontalAlignment = xlLeft
+
+            totalLooseQuantity = 0
+            totalPallets = 0
+            
+        End If
+
+        i = i + ordersInShipment + rowsInserted
+        s = s + 1
+    Wend
+
+    Application.DisplayAlerts = True
+End Sub
+
+Public Sub schedShipTimes()
+
+    Dim data As Variant: data = getValues(m_name, 1, 1, 0, 0)
+    Dim headerRow As Variant: headerRow = isoRow_from_2dArr(data, WS_MANIFEST_HEADER_ROW, False)
+    Dim col As col: Set col = New col: Call col.constructor(headerRow)
+    Dim colArn As Integer:           colArn = col.re(COLRE_ARN)
+    Dim colSchedShipTime As Integer: colSchedShipTime = col.re(COLRE_SCHED_SHIP_TIME)
+
+    Dim colreShipmentRefId As Integer: colreShipmentRefId = col.re(COLRE_SHIPMENT_REF_ID)
+    Dim colreShipToLoc As Integer:     colreShipToLoc = col.re(COLRE_SHIPTOLOC)
+    
+    Dim sstData As Variant: sstData = getValues(WS_NAME_SCHED_SHIP_TIMES, 1, 1, WS_SCHED_SHIP_TIMES_MAX_ROW, 0)
+
+    Dim arn As String
+    Dim x As Integer: x = WS_MANIFEST_FIRST_ROW
+    
+    While x <= UBound(data) 'for each shipment in manifest
+
+        'IF ARN FOUND
+        If data(x, colArn) <> "" Then
+            arn = data(x, colArn)
+            
+            Dim ogArn As String: ogArn = data(x, colArn)
+            Dim ogShipRefId As String: ogShipRefId = data(x, colreShipmentRefId)
+            Dim ogShipToLoc As String: ogShipToLoc = data(x, colreShipToLoc)
+
+            Dim endInnerLoop As Boolean: endInnerLoop = False
+            
+            Dim startTime As String: startTime = vLookup(ogArn, sstData, WS_SCHED_SHIP_TIMES_COL_START)
+            Dim endTime As String:   endTime = vLookup(ogArn, sstData, WS_SCHED_SHIP_TIMES_COL_END)
+
+            If startTime <> "" And endTime <> "" Then
+                Dim combined As String: combined = startTime & " - " & endTime
+                m_ws.Cells(x, colSchedShipTime) = combined
+            End If
+        End If
+        x = x + 1
+        
+    Wend
+End Sub
+
+
+'----------------------------------------------------
+'--- GET/LET/SET
+'----------------------------------------------------
+Public Property Let name(name As String): m_name = name: End Property
+Public Property Get name() As String: name = m_name: End Property
+
+Public Property Set ws(ws As Worksheet): Set m_ws = ws: End Property
+Public Property Get ws() As Worksheet: ws = m_ws: End Property
+
+Public Property Let shipDate(shipDate As Date): m_shipDate = shipDate: End Property
+Public Property Get shipDate() As Date: shipDate = m_shipDate: End Property
+
+Public Property Let shipFromWarehouse(shipFromWarehouse As Date): m_shipFromWarehouse = shipFromWarehouse: End Property
+Public Property Get shipFromWarehouse() As Date: shipFromWarehouse = m_shipFromWarehouse: End Property
+
+
+
