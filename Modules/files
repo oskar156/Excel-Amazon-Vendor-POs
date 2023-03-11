@@ -1,0 +1,737 @@
+'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Module: files
+
+'--- CHECK
+'Function pathExists(path As String) As Boolean
+
+'--- CREATE
+'Sub      ceateFolder(path As String)
+'Sub      createWorkbook(path As String)
+'Sub      createTextFile(path As String, Optional overwrite As Boolean = False)
+
+'--- COPY
+'Sub      copyFile(path As String)
+
+'--- GET
+'Function getFolder(path As String) As Object
+'Function getWorkbook(path As String) As Workbook
+'Function getTextFile(path As String) As Object
+
+'--- NAME
+'Function listOfFileNamesInPath(path As String, Optional extension As String = "", Optional excludeFilesThatStartWith As String = "") As Variant
+'Function rename(ogPath As String, nuPath As String, Optional overwriteIfExists As Boolean = False) As String
+
+'--- READ
+'Function readTextFile(path As String) As Variant
+'Function readTextFileAsString(path As String) As String
+'Function parse2dArrFromCsv(path As String) As Variant
+    'DEPENDENT ON MODULE fxGeneric_strings: SplitBase1
+
+'--- SAVE
+'Function saveWorksheetAsPdf(wb As Workbook, ws As Worksheet) As String
+'Sub      Sub printSettings(ws As Worksheet, orientation As String)
+
+'--- WRITE
+'Sub      writeToTextFile(path As String, lines As Variant, Optional overwrite As Boolean = False, Optional addIfDoesNotExist As Boolean = False)
+'Sub      writeToCsvFile(path As String, arr2d As Variant, Optional overwrite As Boolean = False, Optional addIfDoesNotExist As Boolean = False)
+'Sub      deleteLine(path As String, lookupMethod As String, lookupValue As String, Optional deleteSingleLine As Boolean = True)
+
+'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+'--- OPTIONS
+Option Explicit
+Option Base 1
+
+
+'----------------------------------------------------
+'--- CHECK
+'----------------------------------------------------
+Function pathExists(path As String) As Boolean
+    If Dir(path, vbDirectory) <> "" Then
+        pathExists = True
+    Else
+        pathExists = False
+    End If
+End Function
+
+
+'----------------------------------------------------
+'--- CREATE
+'----------------------------------------------------
+Sub createFolder(path As String)
+    If pathExists(path) = False Then
+        Dim FSO As Object: Set FSO = CreateObject("Scripting.FileSystemObject")
+        Call FSO.createFolder(path)
+    End If
+End Sub
+
+Sub createWorkbook(path As String)
+    If pathExists(path) = False Then
+        Workbooks.Add
+        ActiveWorkbook.SaveAs path
+    End If
+End Sub
+
+Sub createTextFile(path As String, Optional overwrite As Boolean = False)
+    If pathExists(path) = False Then
+        Dim FSO As Object: Set FSO = CreateObject("Scripting.FileSystemObject")
+        Call FSO.createTextFile(path, overwrite)
+    End If
+End Sub
+
+
+'----------------------------------------------------
+'--- COPY
+'----------------------------------------------------
+Sub copyFile(sourcePath As String, destinationPath As String, overwrite As Boolean)
+    If pathExists(sourcePath) = True Then
+        Dim FSO As Object: Set FSO = CreateObject("Scripting.FileSystemObject")
+        Call FSO.copyFile(sourcePath, destinationPath, overwrite)
+    End If
+End Sub
+
+
+'----------------------------------------------------
+'--- GET
+'----------------------------------------------------
+Function getFolder(path As String, Optional addIfDoesNotExist As Boolean = False) As Object
+
+    If pathExists(path) = False And addIfDoesNotExist = True Then
+        createFolder (path)
+    ElseIf pathExists(path) = False And addIfDoesNotExist = False Then
+        prompt_alert ("FOLDER PATH DOES NOT EXIST: " & path)
+        End
+    End If
+
+    Dim FSO As Object: Set FSO = CreateObject("Scripting.FileSystemObject")
+    Dim folder As Object: Set folder = FSO.getFolder(path)
+    Set getFolder = folder
+End Function
+
+Function getWorkbook(path As String, Optional addIfDoesNotExist As Boolean = False) As Workbook
+
+    If pathExists(path) = False And addIfDoesNotExist = True Then
+        createWorkbook (path)
+    ElseIf pathExists(path) = False And addIfDoesNotExist = False Then
+        prompt_alert ("WORKBOOK PATH DOES NOT EXIST: " & path)
+        End
+    End If
+    
+    Dim wb As Workbook: Set wb = Workbooks.Open(path)
+    Set getWorkbook = wb
+End Function
+
+Function getTextFile(path As String, Optional addIfDoesNotExist As Boolean = False) As Object
+
+    If pathExists(path) = False And addIfDoesNotExist = True Then
+        createTextFile (path)
+    ElseIf pathExists(path) = False And addIfDoesNotExist = False Then
+        prompt_alert ("TEXT FILE PATH DOES NOT EXIST: " & path)
+        End
+    End If
+
+    Dim FSO As Object: Set FSO = CreateObject("Scripting.FileSystemObject")
+    Dim file As Object: Set file = FSO.getFile(path)
+    Set getTextFile = file
+End Function
+
+
+'----------------------------------------------------
+'--- NAME
+'----------------------------------------------------
+Function listOfFileNamesInPath(path As String, Optional extension As String = "", _
+                               Optional excludeFilesThatStartWith As String = "", Optional includeFilesThatStartWith As String = "") As Variant
+
+    Dim folder As Object: Set folder = getFolder(path, False)
+
+    Dim file As Object
+    Dim files() As Variant
+    Dim i As Integer: i = 1
+    
+    For Each file In folder.files
+
+        Dim fileName As String: fileName = file.name
+        Dim excludeLen As Integer
+        Dim includeLen As Integer
+
+        If excludeFilesThatStartWith <> "" Then excludeLen = Len(excludeFilesThatStartWith)
+        If includeFilesThatStartWith <> "" Then includeLen = Len(includeFilesThatStartWith)
+        
+        If fileName <> "newPOsFile_usa220808-100207.csv" And _
+           (excludeFilesThatStartWith = "" Or _
+            (excludeFilesThatStartWith <> "" And Left(fileName, excludeLen) <> excludeFilesThatStartWith)) And _
+           (includeFilesThatStartWith = "" Or _
+            (includeFilesThatStartWith <> "" And Left(fileName, includeLen) = includeFilesThatStartWith)) Then
+        
+            If extension = "" Then
+                ReDim Preserve files(i)
+                files(i) = file.name
+                i = i + 1
+            Else
+                Dim extRe As String: extRe = regexMatch("/\..+/i", file.name)
+                extRe = Right(extRe, Len(extRe) - 1)
+            
+                If extRe = extension Then
+                    ReDim Preserve files(i)
+                    files(i) = file.name
+
+                    i = i + 1
+                End If
+            End If
+        End If
+    Next file
+
+    listOfFileNamesInPath = files
+End Function
+
+Function rename(ogPath As String, nuPath As String, Optional overwriteIfExists As Boolean = False) As String
+
+    If pathExists(nuPath) = True And overwriteIfExists = True Then 'delete existing file if user wants to
+        Kill nuPath
+    ElseIf pathExists(nuPath) = True And overwriteIfExists = False Then
+
+        Dim extension As String: extension = ""
+        If InStr(nuPath, ".") <> 0 Then 'get extension
+            Dim c As Integer: c = 1
+            Dim periodFound As Boolean: periodFound = False
+
+            While c <= Len(nuPath) And periodFound = False
+                
+                Dim substr As String: substr = Right(nuPath, c)
+                
+                If InStr(substr, ".") <> 0 Then
+                    periodFound = True
+                    extension = substr
+                End If
+                
+                c = c + 1
+            Wend
+        End If
+
+        Dim fileName As String: fileName = nuPath
+        If extension <> "" Then
+            fileName = Left(fileName, Len(fileName) - Len(extension))
+        End If
+
+        Dim i As Integer: i = 2
+        While pathExists(nuPath) = True 'loop until unique path found
+            
+            nuPath = fileName & " (" & i & ")" & extension
+            i = i + 1
+        Wend
+    End If
+
+    Name ogPath As nuPath
+    
+    rename = nuPath
+End Function
+
+
+'----------------------------------------------------
+'--- READ
+'----------------------------------------------------
+Function readTextFile(path As String) As Variant
+
+    If pathExists(path) = False Then
+        prompt_alert ("TEXT FILE PATH DOES NOT EXIST: " & path)
+        End
+    End If
+    
+    Dim iomode As Integer: iomode = 1 'ForReading
+
+    Dim FSO As Object: Set FSO = CreateObject("Scripting.FileSystemObject")
+    Dim file As Object: Set file = FSO.getFile(path)
+    Dim txtStream As Object: Set txtStream = file.OpenAsTextStream(iomode)
+    
+    Dim lines() As Variant
+    Dim lineCounter As Integer: lineCounter = 1
+    
+    Do While txtStream.AtEndOfStream <> True
+        Dim line As String: line = txtStream.ReadLine
+        ReDim Preserve lines(lineCounter)
+        lines(lineCounter) = line
+        lineCounter = lineCounter + 1
+    Loop
+    
+    txtStream.Close
+
+    readTextFile = lines
+End Function
+
+Function readTextFileAsString(path As String) As String
+
+    Dim lines As Variant: lines = readTextFile(path)
+    Dim str As String: str = ""
+On Error GoTo Err:
+    Dim i As Integer: i = LBound(lines)
+    While i <= UBound(lines)
+        str = str & lines(i) & endl(1)
+        i = i + 1
+    Wend
+
+    readTextFileAsString = str
+    Exit Function
+Err:
+    readTextFileAsString = ""
+End Function
+
+Function parse2dArrFromCsv(path As String, Optional delimeterNOTUSED As String = ",") As Variant 'maybe add delim and qual as parameters
+
+    'Initilazie data
+    Dim data() As Variant
+    ReDim Preserve data(1, 1)
+    
+    'ReDim data
+    Dim lines As Variant: lines = readTextFile(path) 'get number of lines from file (UBound 1)
+    Dim splitstr As Variant: splitstr = SplitBase1(lines(1), ",") 'split first line by delim (UBound 2)
+    'If delim is w/in a qualifier, then UBound 2 will be too high (blank elements will be added to the end of lines)
+    'If first line has less elements than the rest of the lines, then UBound 2 will be too low (data will be lost)
+    data = ReDimPreserve(data, UBound(lines), UBound(splitstr)) 're-dim the array
+
+    'Loop through each line in the file
+    Dim x As Integer: x = 1
+    While x <= UBound(lines, 1)
+    
+        Dim line As String: line = lines(x)
+
+        Dim char As String
+        'Dim nextChar As String
+        Dim c As Integer: c = 1
+        
+        'Loop through each blank element in data
+        Dim y As Integer: y = 1
+        While y <= UBound(data, 2)
+
+            Dim stopWritingElement As Boolean
+            Dim element As String: element = ""
+            char = Mid(line, c, 1)
+            
+            '--- if char is a QUAL -----------------------
+            If char = """" Then
+            
+                c = c + 1 'skip QUAL
+                                
+                stopWritingElement = False
+                While stopWritingElement = False
+                    char = Mid(line, c, 1)
+                    
+                    If char = """" Then 'add to element until the next QUAL
+                        If c + 1 > Len(line) Then 'add to element until END OF LINE
+                             stopWritingElement = True
+                        Else
+                            If Mid(line, c + 1, 1) = "," Then 'add to element until the nextChar is DELIM
+                                stopWritingElement = True
+                                c = c + 1 'skip QUAL and COMMA
+                            Else
+                                element = element + char
+                            End If
+                        End If
+                    Else
+                        element = element + char
+                    End If
+                    
+                    c = c + 1
+                Wend
+            
+            '--- if char is a DELIM -----------------------
+            ElseIf char = "," Then
+            
+                stopWritingElement = True
+                c = c + 1 'skip DELIM
+            
+            '--- if char is normal -----------------------
+            Else
+                                
+                stopWritingElement = False
+                While stopWritingElement = False
+                    char = Mid(line, c, 1)
+                    
+                    If char = "," Then 'add to element until DELIM
+                        c = c + 1 'skip DELIM
+                        stopWritingElement = True
+                    Else
+                        If c > Len(line) Then 'add to element until END OF LINE
+                            stopWritingElement = True
+                        End If
+                        
+                        element = element + char
+                        c = c + 1
+                    End If
+                Wend
+            End If
+            
+            '--- add element to data -----------------------
+            data(x, y) = element
+            y = y + 1
+        Wend
+        
+        x = x + 1
+    Wend
+
+    parse2dArrFromCsv = data
+End Function
+
+Function parse2dArrFromCsvOLD(path As String, Optional delimeter As String = DBLQT & "," & DBLQT) As Variant
+   
+    Dim lines As Variant: lines = readTextFile(path)
+    Dim splitstr As Variant: splitstr = SplitBase1(lines(1), delimeter)
+
+    Dim data() As Variant
+    ReDim Preserve data(1, 1)
+    data = ReDimPreserve(data, UBound(lines), UBound(splitstr))
+
+    Dim x As Integer: x = 1
+    While x <= UBound(lines, 1)
+    
+        Dim trimmedLine As String: trimmedLine = lines(x)
+        trimmedLine = Right(trimmedLine, Len(trimmedLine) - 1)
+        trimmedLine = Left(trimmedLine, Len(trimmedLine) - 1)
+        Dim splitLn As Variant:  splitLn = SplitBase1(trimmedLine, delimeter)
+
+        Dim y As Integer: y = LBound(splitLn)
+        While y <= UBound(splitLn)
+            
+            Dim element As Variant: element = splitLn(y)
+            data(x, y) = element
+            
+            y = y + 1
+        Wend
+        
+        x = x + 1
+    Wend
+
+    parse2dArrFromCsv = data
+End Function
+
+
+'----------------------------------------------------
+'--- SAVE
+'----------------------------------------------------
+Function saveWorksheetAsPdf(wb As Workbook, ws As Worksheet, Optional fileName As String = "", _
+                            Optional x1 As Integer = 0, Optional y1 As Integer = 0, _
+                            Optional x2 As Integer = 0, Optional y2 As Integer = 0) As String
+
+    Application.DisplayAlerts = False
+    
+    Dim strTime As String
+    Dim strName As String
+    Dim strPath As String
+    Dim strFile As String
+    Dim strPathFile As String
+    Dim myFile As Variant
+
+    strTime = Format(Now(), "yyyymmdd\_hhmm")
+
+    'get active workbook folder, if saved
+    strPath = "C:\Users\" & Environ("username") & "\Desktop" 'wb.path
+    If strPath = "" Then
+        strPath = Application.DefaultFilePath
+    End If
+    strPath = strPath & "\"
+
+    If fileName = "" Then
+        fileName = ws.name
+    End If
+    
+    'replace spaces and periods in sheet name
+    strName = fileName
+    strName = Replace(strName, " ", "")
+    strName = Replace(strName, ".", "_")
+    strName = Replace(strName, "?", "_Q_")
+    
+    'create default name for savng file
+    strFile = strName & "_" & strTime & ".pdf"
+    strPathFile = strPath & strFile
+    
+    'use can enter name and ' select folder for file
+    myFile = Application.GetSaveAsFilename _
+             (InitialFileName:=strPathFile, _
+              FileFilter:="PDF Files (*.pdf), *.pdf", _
+              title:="Select Folder and FileName to save")
+              
+    'https://stackoverflow.com/questions/23118877/save-as-pdf-in-landscape
+    'export to PDF if a folder was selected
+    ws.Activate
+    
+    Call printSettings(ws, "portrait")
+    
+    If myFile <> "False" Then
+    
+        If x1 >= 1 And y1 >= 1 And x2 >= 1 And y2 >= 1 Then
+            ws.Range(Cells(x1, y1), Cells(x2, y2)).ExportAsFixedFormat _
+                Type:=xlTypePDF, _
+                fileName:=myFile, _
+                Quality:=xlQualityStandard, _
+                IncludeDocProperties:=True, _
+                IgnorePrintAreas:=True, _
+                OpenAfterPublish:=False
+        Else
+            ws.ExportAsFixedFormat _
+                Type:=xlTypePDF, _
+                fileName:=myFile, _
+                Quality:=xlQualityStandard, _
+                IncludeDocProperties:=True, _
+                IgnorePrintAreas:=True, _
+                OpenAfterPublish:=False
+        End If
+    End If
+    Call printSettings(ws, "portrait")
+    Application.DisplayAlerts = True
+    
+    saveWorksheetAsPdf = strPathFile
+End Function
+
+Sub printSettings(ws As Worksheet, orientation As String)
+
+    On Error Resume Next
+    Application.PrintCommunication = False
+    
+    With ws.PageSetup
+    
+        If orientation = "portrait" Then
+        
+            .orientation = xlPortrait
+            .Zoom = False
+            .PrintGridlines = False
+            .PaperSize = xlPaperLetter
+            .FitToPagesWide = 1
+            .FitToPagesTall = 0
+            
+        ElseIf orientation = "landscape" Then
+        
+            .orientation = xlLandscape
+            .Zoom = False
+            .PrintGridlines = False
+            .PaperSize = xlPaperLetter
+            .FitToPagesWide = 0
+            .FitToPagesTall = 1
+            
+        End If
+
+    End With
+    
+    Application.PrintCommunication = True
+End Sub
+
+Sub printOut(wsName As String, printerName As String, printSetting As String, Optional x1 As Integer = 1, Optional y1 As Integer = 1, Optional x2 As Integer = 0, Optional y2 As Integer = 0, _
+             Optional copies As Integer = 1, Optional collate As Boolean = False, Optional preview As Boolean = False)
+             
+    Dim procTitle As String: procTitle = "printOut"
+    Dim ws As Worksheet: Set ws = ActiveWorkbook.Sheets(wsName)
+    
+    Call printSettings(ws, printSetting)
+    Dim data As Variant: data = getValues(wsName, 1, 1, 0, 0)
+
+    'LOOP UNTIL VALID NE NUMBER FOUND
+    Dim maxNE As Integer: maxNE = 99
+    Dim ne As Integer: ne = 0
+    Dim printerError As Boolean: printerError = True
+    While ne < maxNE And printerError = True
+    
+        Dim neIndex As String: neIndex = ""
+        
+        If ne < 10 Then
+            neIndex = " on Ne0" & CStr(ne) & ":"
+        ElseIf ne >= 10 Then
+            neIndex = " on Ne" & CStr(ne) & ":"
+        End If
+        
+        Dim activePrinterNameNE As String: activePrinterNameNE = printerName & neIndex
+        
+        On Error GoTo Skip
+        Application.ActivePrinter = activePrinterNameNE
+        printerError = False
+
+        
+        If printerError = True Then
+Skip:
+        On Error GoTo 0
+        Resume keepGoing
+        End If
+keepGoing:
+        ne = ne + 1
+    Wend
+
+    If x2 <= 0 Then
+         x2 = UBound(data, 2)
+    End If
+    
+    If y2 <= 0 Then
+         y2 = UBound(data, 1)
+    End If
+    
+    
+    Call ws.Range(Cells(x1, y1), Cells(x2, y2)).printOut(1, 99, copies, preview, activePrinterNameNE, False, collate)
+End Sub
+    
+Sub printOutSetUp(wsName As String, printerName As String, printSetting As String, Optional x1 As Integer = 1, Optional y1 As Integer = 1, Optional x2 As Integer = 0, Optional y2 As Integer = 0, _
+                  Optional copies As Integer = 1, Optional collate As Boolean = False, Optional preview As Boolean = False)
+             
+    Dim procTitle As String: procTitle = "printOut"
+    Dim ws As Worksheet: Set ws = ActiveWorkbook.Sheets(wsName)
+    
+    Call printSettings(ws, printSetting)
+    Dim data As Variant: data = getValues(wsName, 1, 1, 0, 0)
+
+    'LOOP UNTIL VALID NE NUMBER FOUND
+    Dim maxNE As Integer: maxNE = 99
+    Dim ne As Integer: ne = 0
+    Dim printerError As Boolean: printerError = True
+    While ne < maxNE And printerError = True
+    
+        Dim neIndex As String: neIndex = ""
+        
+        If ne < 10 Then
+            neIndex = " on Ne0" & CStr(ne) & ":"
+        ElseIf ne >= 10 Then
+            neIndex = " on Ne" & CStr(ne) & ":"
+        End If
+        
+        Dim activePrinterNameNE As String: activePrinterNameNE = printerName & neIndex
+        
+        On Error GoTo Skip
+        Application.ActivePrinter = activePrinterNameNE
+        printerError = False
+
+        
+        If printerError = True Then
+Skip:
+        On Error GoTo 0
+        Resume keepGoing
+        End If
+keepGoing:
+        ne = ne + 1
+    Wend
+
+    If x2 <= 0 Then
+         x2 = UBound(data, 2)
+    End If
+    
+    If y2 <= 0 Then
+         y2 = UBound(data, 1)
+    End If
+End Sub
+
+'----------------------------------------------------
+'--- WRITE
+'----------------------------------------------------
+Sub writeToTextFile(path As String, lines As Variant, Optional overwrite As Boolean = False, Optional addIfDoesNotExist As Boolean = False)
+
+    If pathExists(path) = False And addIfDoesNotExist = True Then
+        createTextFile (path)
+    ElseIf pathExists(path) = False And addIfDoesNotExist = False Then
+        prompt_alert ("TEXT FILE PATH DOES NOT EXIST: " & path)
+        End
+    End If
+    
+    Dim iomode As Integer
+    If overwrite = True Then iomode = 2 'ForWriting
+    If overwrite = False Then iomode = 8 'ForAppending
+    
+    Dim FSO As Object: Set FSO = CreateObject("Scripting.FileSystemObject")
+    Dim file As Object: Set file = FSO.getFile(path)
+    Dim txtStream As Object: Set txtStream = file.OpenAsTextStream(iomode)
+    Dim line As Variant
+    
+    If VarType(lines) = vbString Then
+        
+        Dim lineArray As Variant: lineArray = SplitBase1(lines, vbNewLine)
+        For Each line In lineArray
+            Call txtStream.WriteLine(line)
+        Next
+    Else
+        For Each line In lines
+            Call txtStream.WriteLine(line)
+        Next
+    End If
+    txtStream.Close
+End Sub
+
+Sub writeToCsvFile(path As String, arr2d As Variant, Optional overwrite As Boolean = False, Optional addIfDoesNotExist As Boolean = False)
+
+    If pathExists(path) = False And addIfDoesNotExist = True Then
+        createTextFile (path)
+    ElseIf pathExists(path) = False And addIfDoesNotExist = False Then
+        prompt_alert ("TEXT FILE PATH DOES NOT EXIST: " & path)
+        End
+    End If
+    
+    Dim iomode As Integer
+    If overwrite = True Then 'ForWriting
+        iomode = 2
+    ElseIf overwrite = False Then 'ForAppending
+        iomode = 8
+    End If
+
+    Dim FSO As Object: Set FSO = CreateObject("Scripting.FileSystemObject")
+    Dim file As Object: Set file = FSO.getFile(path)
+    Dim txtStream As Object: Set txtStream = file.OpenAsTextStream(iomode)
+
+    Dim x As Integer: x = 1
+    While x <= UBound(arr2d, 1)
+        
+        Dim y As Integer: y = 1
+        While y <= UBound(arr2d, 2)
+        
+            Dim element As Variant: element = arr2d(x, y)
+            
+            If VarType(element) = vbDate And element = CDate(0) Then
+                element = ""
+            End If
+            
+            Dim DBLQT As String: DBLQT = """"
+            Call txtStream.Write(DBLQT & element & DBLQT)
+            
+            If y < UBound(arr2d, 2) Then txtStream.Write (",")
+            y = y + 1
+        Wend
+        
+        Call txtStream.Write(vbNewLine)
+        x = x + 1
+    Wend
+
+    txtStream.Close
+End Sub
+
+Sub deleteLine(path As String, lookupMethod As String, lookupValue As String, Optional deleteSingleLine As Boolean = True)
+
+    'get lines
+    Dim lines As Variant: lines = readTextFile(path)
+    Dim newLines As Variant
+    
+    'for each line decide if keep or delete
+    Dim i As interger: i = LBound(lines)
+    Dim continueLoop As Boolean: continueLoop = True
+    Dim matches As Integer: matches = 0
+    
+    While i <= UBound(lines) And _
+          continueLoop = True
+    
+        Dim line As String: line = lines(i)
+        Dim saveLine As Boolean: saveLine = True
+        
+        If lookupMethod = "match" Then
+            If line = lookupValue Then
+                saveLine = False
+            End If
+        ElseIf lookupMethod = "re" Or lookupMethod = "regex" Then
+            If regexIsMatch(lookupValue, line) = True Then
+                saveLine = False
+            End If
+        End If
+        
+        If saveLine = True Then
+            Call variantPush(newLines, line)
+            matches = matches + 1
+        End If
+        
+        If deleteSingleLine = True And matches >= 1 Then
+            continueLoop = False
+        End If
+        
+        i = i + 1
+    Wend
+End Sub
+
+
+
