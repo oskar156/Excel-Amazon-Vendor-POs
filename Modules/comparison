@@ -1,0 +1,59 @@
+'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Module: comparison
+
+'Function comp(val1 As Variant, val2 As Variant, qualifier As Variant) As Boolean
+
+'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+'--- OPTIONS
+Option Explicit
+Option Base 1
+
+
+Function comp(val1 As Variant, val2 As Variant, qualifier As Variant) As Boolean 'qualifier should be a string
+
+    Dim isTrue As Boolean: isTrue = True
+    
+    If qualifier = "=" Then
+    
+        If val1 <> val2 Then
+            isTrue = False
+        End If
+        
+    ElseIf qualifier = "<>" Then
+
+        If val1 = val2 Then
+            isTrue = False
+        End If
+        
+    ElseIf qualifier = ">" Then
+    
+        If val1 <= val2 Then
+            isTrue = False
+        End If
+        
+    ElseIf qualifier = "<" Then
+    
+        If val1 >= val2 Then
+            isTrue = False
+        End If
+        
+    ElseIf qualifier = "=>" Then
+    
+        If val1 < val2 Then
+            isTrue = False
+        End If
+        
+    ElseIf qualifier = "=<" Then
+    
+        If val1 > val2 Then
+            isTrue = False
+        End If
+        
+    End If
+    
+    comp = isTrue
+End Function
+
+
+
