@@ -1,0 +1,86 @@
+'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Module: colRow
+
+'--- RETURN COLUMN INDEX BASED ON SEARCH TERM
+'Function col(search As String, arr2d As Variant, Optional rowIndex As Integer = 1) As Integer
+'Function colre(regexPattern As String, arr2d As Variant, Optional rowIndex As Integer = 1) As Integer
+
+'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+'--- OPTIONS
+Option Explicit
+Option Base 1
+
+
+'----------------------------------------------------
+'--- RETURN COLUMN INDEX BASED ON SEARCH TERM
+'----------------------------------------------------
+Function col(search As String, arr2d As Variant, Optional rowIndex As Integer = 1) As Integer
+
+    Dim colIndex As Integer: colIndex = 1
+    While colIndex < UBound(arr2d, 2) And _
+          arr2d(rowIndex, colIndex) <> search
+           
+        colIndex = colIndex + 1
+    Wend
+     
+    col = colIndex
+End Function
+
+Function colre(regexPattern As String, arr2d As Variant, Optional rowIndex As Integer = 1) As Integer
+
+    Dim colIndex As Integer: colIndex = 1
+    Dim matchFound As Boolean: matchFound = False
+    Dim globalFlag As Boolean: globalFlag = False
+    Dim ignoreCaseFlag As Boolean: ignoreCaseFlag = False
+    Dim multiLineFlag As Boolean: multiLineFlag = False
+    
+    Dim flags As Integer: flags = 0
+    
+    'setting up regex flags
+    If (Left(regexPattern, 1) = "/") Then
+    
+        Dim c As Integer: c = 0
+        While c < Len(regexPattern) And _
+              Right(Left(regexPattern, Len(regexPattern) - c), 1) <> "/"
+            
+            Dim char As String: char = Right(Left(regexPattern, Len(regexPattern) - c), 1)
+            If char = "g" Then: globalFlag = True
+            If char = "i" Then: ignoreCaseFlag = True
+            If char = "m" Then: multiLineFlag = True
+            flags = flags + 1
+            c = c + 1
+        Wend
+        
+        regexPattern = Right(regexPattern, Len(regexPattern) - 1)
+        regexPattern = Left(regexPattern, Len(regexPattern) - (1 + flags))
+    End If
+    
+    'searching for a match with regex
+    While colIndex <= UBound(arr2d, 2) And _
+          matchFound <> True
+           
+        Dim regex As Object: Set regex = New RegExp
+        regex.Pattern = regexPattern
+        
+        If globalFlag = True Then: regex.Global = True
+        If ignoreCaseFlag = True Then: regex.ignoreCase = True
+        If multiLineFlag = True Then: regex.multiLine = True
+        
+        Dim matches As Object: Set matches = regex.execute(arr2d(rowIndex, colIndex))
+        Dim match As Object
+        
+        For Each match In matches:
+            matchFound = True
+        Next
+
+        If matchFound = False Then
+            colIndex = colIndex + 1
+        End If
+    Wend
+
+    colre = colIndex
+End Function
+
+
+
