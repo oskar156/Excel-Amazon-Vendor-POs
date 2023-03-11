@@ -1,0 +1,712 @@
+'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Module: a_main04_maintenance
+
+'--- PROCEDURES
+'CNCL Sub maint_updateCancelsReport()
+'CR   Sub maint_customReport()
+
+'E.1 Sub maint_sendEmail()
+
+'4.1 Sub maint_updateArchive()
+'4.2 Sub maint_updateAmazonWarehouses()
+'4.3 Sub maint_updateEWWarehouses()
+'4.4 Sub maint_updateCarriers()
+'4.5 Sub maint_updateItems()
+'4.6 Sub maint_updateHolidays()
+'4.7 Sub maint_viewRRLog()
+'4.8 Sub maint_updatePrinters()
+'4.9 Sub maint_updateOnHandInventory()
+'4.10 Sub maint_updateEstimatedInventory()
+'4.11 Sub maint_viewSchedShipTimes()
+
+'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+'--- OPTIONS
+Option Explicit
+Option Base 1
+
+
+'----------------------------------------------------
+'--- SUBS
+'----------------------------------------------------
+
+
+''''''''''''''''''''
+' CNCL
+''''''''''''''''''''
+Sub maint_updateCancelsReport()
+    Dim procTitle As String: procTitle = "maint_updateCancelsReport"
+
+    'get new POs have been cancelled emails
+    Dim bigFolderName As String: bigFolderName = getMacroParameter(procTitle, "Outlook Big Folder", False)
+    Dim folderName As String:    folderName = getMacroParameter(procTitle, "Outlook RR Folder", False)
+    Dim oldFolderName As String: oldFolderName = getMacroParameter(procTitle, "Outlook RR Old Folder", False)
+    Dim emails As Variant: emails = getEmailFieldsByFolder(bigFolderName, folderName, "customEmailObj") ',oldFolderName) 'move new cancel emails to old label
+    Call endIfNotInit(emails, "No new emails found. Update canceled.", procTitle)
+
+    Dim pos As Variant
+    Dim skus As Variant
+    Dim orderDates As Variant
+    Dim sentDates As Variant
+    
+    Dim archive As archive: Set archive = New archive: Call archive.constructor
+    
+    Dim row As Integer: row = 3
+    
+    Dim e As Integer: e = LBound(emails)
+    While e <= UBound(emails) 'FOR EACH EMAIL
+    
+        Dim body As String: body = emails(e).body
+        Dim sentDate As Date: sentDate = emails(e).sentDate
+        
+        Dim orderDateBlocks As Variant: orderDateBlocks = regexMatchMultiple("/ordered on [^$]*/gim", body)
+        
+        Dim b As Integer: b = LBound(orderDateBlocks)
+        While b <= UBound(orderDateBlocks) 'FOR EACH ORDER DATE BLOCK
+        
+            Dim orderDateBlock As String: orderDateBlock = orderDateBlocks(b)
+            Dim lineItems As Variant: lineItems = regexMatchMultiple("/.*https:..vendorcentral.amazon.com.*/gim", orderDateBlock)
+            
+            Dim orderDateRaw As String: orderDateRaw = regexMatch("/ordered on .*/i", orderDateBlock)
+            orderDateRaw = trimString(orderDateRaw)
+
+            Dim yr As Integer: yr = CInt(Right(orderDateRaw, 4))
+            Dim mo As Integer: mo = MONTH_NAME_TO_INDEX(Mid(orderDateRaw, Len("ordered on DAY ") + 1, 3))
+            Dim dy As Integer: dy = trimString(Mid(orderDateRaw, Len("ordered on DAY MNT ") + 1, 2))
+            Dim orderDate As Date: orderDate = DateSerial(yr, mo, dy)
+            
+            Dim i As Integer: i = LBound(orderDateBlocks)
+            While i <= UBound(lineItems) 'FOR EACH LINE ITEM
+            
+                Dim lineItem As String: lineItem = lineItems(i)
+                Dim po As String:  po = regexMatch("/[0-9A-Z]+/", lineItem)
+                
+                Dim asinAndSku As String
+                asinAndSku = regexMatch("/[ \t]+[A-Z0-9]+[ \t]+[A-Z0-9\-]+/", lineItem)
+
+                Dim c As Integer: c = Len(asinAndSku)
+                Dim r As Integer: r = 0
+
+                  While c >= 1 And _
+                      isWhiteSpace(Mid(asinAndSku, c, 1)) = False
+                    c = c - 1
+                    r = r + 1
+                Wend
+
+                Dim sku As String: sku = Right(asinAndSku, r)
+                If Left(sku, 2) = "V-" Then sku = Right(sku, Len(sku) - 2)
+
+                Call setValue("Cancels", po, row, 1)
+                Call setValue("Cancels", sku, row, 2)
+                Call setValue("Cancels", orderDate, row, 3)
+                Call setValue("Cancels", sentDate, row, 6)
+                
+                Dim colres As Variant: Dim v As Variant: Dim q As Variant
+                Call variantPush(colres, COLRE_PO):         Call variantPush(v, po):        Call variantPush(q, "=")
+                Call variantPush(colres, COLRE_SKU):        Call variantPush(v, sku):       Call variantPush(q, "=")
+                Call variantPush(colres, COLRE_ORDER_DATE): Call variantPush(v, orderDate): Call variantPush(q, "=")
+                Dim orders As Variant
+                
+                If yr >= 2022 And mo >= 7 Then orders = archive.getOrders(colres, v, q)
+                
+                If isVariantArrayInit(orders) = True Then
+                    Call setValue("Cancels", orders(LBound(orders)).windowStart, row, 4)
+                    Call setValue("Cancels", orders(LBound(orders)).windowEnd, row, 5)
+                    Call setValue("Cancels", orders(LBound(orders)).actualShipDate, row, 8)
+                    Call setValue("Cancels", orders(LBound(orders)).status, row, 9)
+                End If
+                row = row + 1
+                
+                i = i + 1
+            Wend
+            b = b + 1
+        Wend
+        e = e + 1
+    Wend
+    
+    Call endIfNotInit(pos, "No Data", procTitle)
+End Sub
+
+
+''''''''''''''''''''
+' CR
+''''''''''''''''''''
+Sub maint_customReport()
+    Dim procTitle As String: procTitle = "maint_customReport"
+    customReport.setUp
+    customReport.Show
+End Sub
+
+
+''''''''''''''''''''
+' E.1 maint_sendEmail
+''''''''''''''''''''
+Sub maint_sendEmail()
+
+    Dim procTitle As String: procTitle = "maint_sendEmail"
+    Dim i As Integer 'reserved for loops
+    
+    Dim subject As String:          subject = getMacroParameter(procTitle, "Subject", False)
+    Dim htmlBody As String:         htmlBody = getMacroParameter(procTitle, "Body", False)
+    Dim attachments As Variant:     attachments = getMacroParameter(procTitle, "Sheets to Attach", True)
+    Dim recipientsArray As Variant: recipientsArray = getMacroParameter(procTitle, "Recipient Emails", True, ";")
+    Dim recipientsStr As String:    recipientsStr = getMacroParameter(procTitle, "Recipient Emails", False)
+    If isVariantArrayInit(recipientsArray) = False Then End
+
+    Dim msg As String: msg = ""
+    msg = msg & "Are you sure you want to send this email... :" & endl(2)
+    msg = msg & "Recipients:" & endl(1)
+    For i = LBound(recipientsArray) To UBound(recipientsArray)
+        msg = msg & recipientsArray(i) & endl(1)
+    Next i
+    msg = msg & endl(1)
+
+    msg = msg & "Subject:" & endl(1)
+    msg = msg & subject & endl(2)
+    msg = msg & "Body:" & endl(1)
+    msg = msg & htmlBody & endl(2)
+    
+    msg = msg & "Attached Worksheets:" & endl(1)
+    For i = LBound(attachments) To UBound(attachments)
+        msg = msg & attachments(i) & endl(1)
+    Next i
+    msg = msg & endl(1)
+    
+    Dim showPreview As Boolean: showPreview = True
+    Call sendEmail(recipientsStr, subject, htmlBody, attachments, showPreview)
+End Sub
+
+
+''''''''''''''''''''
+' 4.1 maint_updateArchive
+''''''''''''''''''''
+Sub maint_updateArchive_OLD()
+    Dim procTitle As String: procTitle = "maint_updateArchive_OLD"
+
+    Dim msg As String: msg = ""
+    msg = msg & "Enter a single ARN or comma-seperated list." & endl(1)
+    msg = msg & "Enter 'all' to update all shipments on the manifest." & endl(1)
+    msg = msg & endl(1)
+    msg = msg & "(Updating the entire manifest may take a few minutes)" & endl(1)
+    
+    Dim shipmentsToUpdate As Variant: shipmentsToUpdate = prompt_inputSplitList(msg, procTitle, ",", True, "lower")
+    If convert_1dArr_Str(shipmentsToUpdate, "", "") = ERROR_QUIT_PROCEDURE Or _
+       convert_1dArr_Str(shipmentsToUpdate, "", "") = "" Then
+        Call prompt_alert("Update Canceled.", procTitle)
+        End
+    End If
+    
+    Dim ws As Worksheet:  Set ws = ActiveWorkbook.ActiveSheet
+    Dim wsName As String: wsName = ws.name
+    
+    Dim archive As archive: Set archive = New archive: Call archive.constructor 'loop through each fileChoices and add to manifest and archive
+    
+    Dim manifestData As Variant:       manifestData = getValues(wsName, 1, 1, 0, 0)
+    Dim manifestHeaderRow As Variant:  manifestHeaderRow = isoRow_from_2dArr(manifestData, WS_MANIFEST_HEADER_ROW, False)
+    Dim col As col: Set col = New col: Call col.constructor(manifestHeaderRow)
+    
+    Dim shipDateStr As String: shipDateStr = Left(wsName, 6)
+    Dim yr As String: yr = Left(shipDateStr, 2)
+    Dim mo As String: mo = Right(Left(shipDateStr, 4), 2)
+    Dim dy As String: dy = Right(shipDateStr, 2)
+    Dim dateStr As String: dateStr = mo & "/" & dy & "/" & yr
+    Dim shipDate As Date:  shipDate = CDate(dateStr)
+    Dim today As Date:     today = DateSerial(Year(Now()), month(Now()), day(Now()))
+    
+    Dim totalOrders As Integer: totalOrders = 0
+    Dim arnsUpdated As String:  arnsUpdated = ""
+
+    Dim r As Integer: r = WS_MANIFEST_FIRST_ROW
+    While r <= UBound(manifestData, 1) 'loop through manifest
+
+        If manifestData(r, col.re(COLRE_SHIPTOLOC)) <> "" Then 'find matches and paste
+
+            Dim continuePlease As Boolean: continuePlease = False
+            Dim cp As Integer: cp = LBound(shipmentsToUpdate)
+            While continuePlease = False And _
+                  cp <= UBound(shipmentsToUpdate)
+
+                If CStr(shipmentsToUpdate(cp)) = CStr(manifestData(r, col.re(COLRE_ARN))) Or _
+                   LCase(CStr(shipmentsToUpdate(cp))) = "all" Then
+                    continuePlease = True
+                End If
+                
+                cp = cp + 1
+            Wend
+
+            If continuePlease = True Then
+
+                Dim newCarrier As String:        newCarrier = manifestData(r, col.re(COLRE_CARRIER))
+                Dim newArn As String:            newArn = manifestData(r, col.re(COLRE_ARN))
+                Dim newShipRefId As String:      newShipRefId = manifestData(r, col.re(COLRE_SHIPMENT_REF_ID))
+                Dim newInvId As String:          newInvId = manifestData(r, col.re(COLRE_INVOICE_ID))
+                Dim newScac As String:           newScac = manifestData(r, col.re(COLRE_SCAC))
+                Dim newActualShipDate As String: newActualShipDate = manifestData(r, col.re(COLRE_ACTUAL_SHIP_DATE))
+                Dim newShipmentPallets As String
+                
+                If col.re(COLRE_SCHED_SHIP_DATE) >= 1 Then
+                    Dim newSchedShipDate As String:  newSchedShipDate = manifestData(r, col.re(COLRE_SCHED_SHIP_DATE))
+                End If
+                
+                Dim newProNum As String:         newProNum = manifestData(r, col.re(COLRE_ASN_ID))
+                Dim newInvSub As String:         newInvSub = manifestData(r, col.re(COLRE_INVOICE_SUBMITTED))
+            
+                Dim newUnitsPerCarton As String: newUnitsPerCarton = manifestData(r, col.re(COLRE_UNITS_PER_CARTON))
+                Dim newCartons As String:        newCartons = manifestData(r, col.re(COLRE_CARTONS))
+                Dim newShippingInfo As String:   newShippingInfo = manifestData(r, col.re(COLRE_SHIPPING_INFO))
+                'Dim newVolume As String:         newVolume = manifestData(r, col.re(COLRE_TOTAL_VOLUME))
+                'Dim newWeight As String:         newWeight = manifestData(r, col.re(COLRE_TOTAL_WEIGHT))
+                'Dim newPallet As String:         newPallet = manifestData(r, col.re(COLRE_PALLETS))
+                If col.re(COLRE_SHIPMENT_PALLETS) >= 1 Then
+                     newShipmentPallets = manifestData(r, col.re(COLRE_SHIPMENT_PALLETS))
+                End If
+                
+                Dim newNotes As String:          newNotes = manifestData(r, col.re(COLRE_NOTES))
+                newNotes = Replace(newNotes, """", "_DBLQT_") 'replace " with SPACE
+                newNotes = Replace(newNotes, ",", "_COMMA_") 'replace , with SPACE
+
+                Dim newStatus As String: newStatus = ""
+                If newActualShipDate = "" And today > shipDate Then
+                    newStatus = "late"
+                ElseIf newActualShipDate <> "" Then
+                    newStatus = "picked up"
+                End If
+            
+                Dim s As Integer: s = r
+                Dim continueLoop As Boolean: continueLoop = True
+                While continueLoop = True:
+                    If manifestData(s, col.re(COLRE_SKU)) <> "" And _
+                       (manifestData(s, col.re(COLRE_ARN)) = "" And _
+                         (manifestData(s, col.re(COLRE_SHIPTOLOC)) = "" Or _
+                          manifestData(s, col.re(COLRE_SHIPTOLOC)) = manifestData(r, col.re(COLRE_SHIPTOLOC)))) Or _
+                       (manifestData(s, col.re(COLRE_ARN)) <> "" And _
+                         (manifestData(s, col.re(COLRE_ARN)) = "" Or _
+                          manifestData(s, col.re(COLRE_ARN)) = manifestData(r, col.re(COLRE_ARN)))) Then
+                         
+                       '(manifestData(s, col.re(COLRE_SHIPTOLOC)) = "" Or _
+                       ' manifestData(s, col.re(COLRE_SHIPTOLOC)) = manifestData(r, col.re(COLRE_SHIPTOLOC))) Then
+
+                        Dim currPo As String:      currPo = manifestData(s, col.re(COLRE_PO))
+                        Dim currSku As String:     currSku = manifestData(s, col.re(COLRE_SKU))
+                        Dim currOrderDate As Date: currOrderDate = CDate(manifestData(s, col.re(COLRE_ORDER_DATE)))
+
+                        Call archive.updateSingleOrder(currPo, currSku, currOrderDate, COLRE_CARRIER, newCarrier)           'Carrier
+                        Call archive.updateSingleOrder(currPo, currSku, currOrderDate, COLRE_ARN, newArn)                   'ARN
+                        Call archive.updateSingleOrder(currPo, currSku, currOrderDate, COLRE_SHIPMENT_REF_ID, newShipRefId) 'Shipment Ref Id
+                        Call archive.updateSingleOrder(currPo, currSku, currOrderDate, COLRE_INVOICE_ID, newInvId)          'Invoice Id
+                        Call archive.updateSingleOrder(currPo, currSku, currOrderDate, COLRE_SCAC, newScac)                 'SCAC
+                        Call archive.updateSingleOrder(currPo, currSku, currOrderDate, COLRE_ACTUAL_SHIP_DATE, newActualShipDate) 'Actual Ship Date
+                        Call archive.updateSingleOrder(currPo, currSku, currOrderDate, COLRE_SCHED_SHIP_DATE, newSchedShipDate) 'Actual Ship Date
+                        Call archive.updateSingleOrder(currPo, currSku, currOrderDate, COLRE_ASN_ID, newProNum)             'PRO Number
+                        Call archive.updateSingleOrder(currPo, currSku, currOrderDate, COLRE_INVOICE_SUBMITTED, newInvSub)  'Invoiced
+                
+                        Call archive.updateSingleOrder(currPo, currSku, currOrderDate, COLRE_UNITS_PER_CARTON, newUnitsPerCarton) 'units per carton
+                        Call archive.updateSingleOrder(currPo, currSku, currOrderDate, COLRE_CARTONS, newUnitsPerCarton) 'cartons
+                        Call archive.updateSingleOrder(currPo, currSku, currOrderDate, COLRE_SHIPPING_INFO, newShippingInfo)      'shipping info
+                        
+                        Dim volumeValue As Variant
+                        volumeValue = manifestData(s, col.re(COLRE_TOTAL_VOLUME))
+                        If volumeValue = "" Then volumeValue = 0
+                        Call archive.updateSingleOrder(currPo, currSku, currOrderDate, COLRE_TOTAL_VOLUME, volumeValue)             'total volume
+                        
+                        Dim weightValue As Variant
+                        weightValue = manifestData(s, col.re(COLRE_TOTAL_WEIGHT))
+                        If weightValue = "" Then weightValue = 0
+                        Call archive.updateSingleOrder(currPo, currSku, currOrderDate, COLRE_TOTAL_WEIGHT, weightValue)             'total weight
+                       
+                        Dim palletValue As Variant
+                        palletValue = manifestData(s, col.re(COLRE_PALLETS))
+                        If palletValue = "" Then palletValue = 0
+                        'MsgBox (currPo & " " & currSku & " " & palletValue)
+                        Call archive.updateSingleOrder(currPo, currSku, currOrderDate, COLRE_PALLETS, palletValue) 'line item pallets
+                        
+                        Call archive.updateSingleOrder(currPo, currSku, currOrderDate, COLRE_SHIPMENT_PALLETS, newShipmentPallets) 'shipment pallets
+                        'shipmentPallets
+                        
+                        If newStatus <> "" Then
+                            Call archive.updateSingleOrder(currPo, currSku, currOrderDate, COLRE_STATUS, newStatus) 'Status
+                        End If
+
+                        Call archive.updateSingleOrder(currPo, currSku, currOrderDate, COLRE_NOTES, newNotes)  'Notes
+                       
+                        
+                        totalOrders = totalOrders + 1
+
+                        s = s + 1
+                        
+                        If s > UBound(manifestData, 1) Then
+                            continueLoop = False
+                        End If
+
+                    Else
+                        continueLoop = False
+                    End If
+                Wend
+            End If
+        End If
+
+        r = r + 1
+    Wend
+
+    Dim finalMsg As String: finalMsg = "" 'exit msg for user
+    finalMsg = finalMsg & totalOrders & " total orders updated in Archive from this Manifest:" & endl(1)
+    Call prompt_alert(finalMsg, "PRO Number Import Completed")
+End Sub
+
+
+''''''''''''''''''''
+' 4.1 maint_updateArchive
+''''''''''''''''''''
+Sub maint_updateArchive()
+    Dim procTitle As String: procTitle = "maint_updateArchive"
+
+    Dim msg As String: msg = ""
+    msg = msg & "Enter a single ARN or comma-seperated list." & endl(1)
+    msg = msg & "Enter 'all' to update all shipments on the manifest." & endl(1)
+    msg = msg & endl(1)
+    msg = msg & "(Updating the entire manifest may take a few minutes)" & endl(1)
+    
+    Dim shipmentsToUpdate As Variant: shipmentsToUpdate = prompt_inputSplitList(msg, procTitle, ",", True, "lower")
+    If convert_1dArr_Str(shipmentsToUpdate, "", "") = ERROR_QUIT_PROCEDURE Or _
+       convert_1dArr_Str(shipmentsToUpdate, "", "") = "" Then
+        Call prompt_alert("Update Canceled.", procTitle)
+        End
+    End If
+    
+    Dim ws As Worksheet:  Set ws = ActiveWorkbook.ActiveSheet
+    Dim wsName As String: wsName = ws.name
+    
+    Dim archive As archive: Set archive = New archive: Call archive.constructor 'loop through each fileChoices and add to manifest and archive
+    
+    Dim manifestData As Variant:       manifestData = getValues(wsName, 1, 1, 0, 0)
+    Dim manifestHeaderRow As Variant:  manifestHeaderRow = isoRow_from_2dArr(manifestData, WS_MANIFEST_HEADER_ROW, False)
+    Dim col As col: Set col = New col: Call col.constructor(manifestHeaderRow)
+    
+    Dim shipDateStr As String: shipDateStr = Left(wsName, 6)
+    Dim yr As String: yr = Left(shipDateStr, 2)
+    Dim mo As String: mo = Right(Left(shipDateStr, 4), 2)
+    Dim dy As String: dy = Right(shipDateStr, 2)
+    Dim dateStr As String: dateStr = mo & "/" & dy & "/" & yr
+    Dim shipDate As Date:  shipDate = CDate(dateStr)
+    Dim today As Date:     today = DateSerial(Year(Now()), month(Now()), day(Now()))
+    
+    Dim totalOrders As Integer: totalOrders = 0
+    Dim arnsUpdated As String:  arnsUpdated = ""
+
+    Dim pos As Variant
+    Dim skus As Variant
+    Dim orderDates As Variant
+    Dim colres As Variant
+    Dim values As Variant
+    Dim ous As Variant
+
+
+    Dim r As Integer: r = WS_MANIFEST_FIRST_ROW
+    
+    While r <= UBound(manifestData, 1) 'loop through manifest
+
+        If manifestData(r, col.re(COLRE_SHIPTOLOC)) <> "" Then 'find matches and paste
+            
+            Dim continuePlease As Boolean: continuePlease = False
+            Dim cp As Integer: cp = LBound(shipmentsToUpdate)
+            While continuePlease = False And _
+                  cp <= UBound(shipmentsToUpdate)
+
+                If CStr(shipmentsToUpdate(cp)) = CStr(manifestData(r, col.re(COLRE_ARN))) Or _
+                   LCase(CStr(shipmentsToUpdate(cp))) = "all" Then
+                    continuePlease = True
+                End If
+                
+                cp = cp + 1
+            Wend
+
+            If continuePlease = True Then
+
+                Dim newCarrier As String:        newCarrier = manifestData(r, col.re(COLRE_CARRIER))
+                Dim newArn As String:            newArn = manifestData(r, col.re(COLRE_ARN))
+                Dim newShipRefId As String:      newShipRefId = manifestData(r, col.re(COLRE_SHIPMENT_REF_ID))
+                Dim newInvId As String:          newInvId = manifestData(r, col.re(COLRE_INVOICE_ID))
+                Dim newScac As String:           newScac = manifestData(r, col.re(COLRE_SCAC))
+                Dim newActualShipDate As String: newActualShipDate = manifestData(r, col.re(COLRE_ACTUAL_SHIP_DATE))
+                Dim newShipmentPallets As String
+                
+                If col.re(COLRE_SCHED_SHIP_DATE) >= 1 Then
+                    Dim newSchedShipDate As String:  newSchedShipDate = manifestData(r, col.re(COLRE_SCHED_SHIP_DATE))
+                End If
+                
+                Dim newProNum As String:         newProNum = manifestData(r, col.re(COLRE_ASN_ID))
+                Dim newInvSub As String:         newInvSub = manifestData(r, col.re(COLRE_INVOICE_SUBMITTED))
+            
+                Dim newUnitsPerCarton As String: newUnitsPerCarton = manifestData(r, col.re(COLRE_UNITS_PER_CARTON))
+                Dim newCartons As String:        newCartons = manifestData(r, col.re(COLRE_CARTONS))
+                Dim newShippingInfo As String:   newShippingInfo = manifestData(r, col.re(COLRE_SHIPPING_INFO))
+
+                If col.re(COLRE_SHIPMENT_PALLETS) >= 1 Then
+                    newShipmentPallets = manifestData(r, col.re(COLRE_SHIPMENT_PALLETS))
+                End If
+                
+                Dim newNotes As String:          newNotes = manifestData(r, col.re(COLRE_NOTES))
+                newNotes = Replace(newNotes, """", "_DBLQT_") 'replace " with SPACE
+                newNotes = Replace(newNotes, ",", "_COMMA_") 'replace , with SPACE
+
+                Dim newStatus As String: newStatus = ""
+                If newActualShipDate = "" And today > shipDate Then
+                    newStatus = "late"
+                ElseIf newActualShipDate <> "" Then
+                    newStatus = "picked up"
+                End If
+            
+                Dim s As Integer: s = r
+                Dim continueLoop As Boolean: continueLoop = True
+                While continueLoop = True:
+                    If manifestData(s, col.re(COLRE_SKU)) <> "" And _
+                       (manifestData(s, col.re(COLRE_ARN)) = "" And _
+                         (manifestData(s, col.re(COLRE_SHIPTOLOC)) = "" Or _
+                          manifestData(s, col.re(COLRE_SHIPTOLOC)) = manifestData(r, col.re(COLRE_SHIPTOLOC)))) Or _
+                       (manifestData(s, col.re(COLRE_ARN)) <> "" And _
+                         (manifestData(s, col.re(COLRE_ARN)) = "" Or _
+                          manifestData(s, col.re(COLRE_ARN)) = manifestData(r, col.re(COLRE_ARN)))) Then
+
+                        Dim cPo As String:  cPo = manifestData(s, col.re(COLRE_PO))
+                        Dim cSku As String: cSku = manifestData(s, col.re(COLRE_SKU))
+                        Dim cOrdDt As Date: cOrdDt = CDate(manifestData(s, col.re(COLRE_ORDER_DATE)))
+                        
+                        Dim ou As UpdateObj
+
+                        Call variantPush(colres, COLRE_CARRIER):           Call variantPush(values, newCarrier)
+                        Call variantPush(colres, COLRE_ARN):               Call variantPush(values, newArn)
+                        Call variantPush(colres, COLRE_CARTONS):           Call variantPush(values, newCartons)
+                        Call variantPush(colres, COLRE_UNITS_PER_CARTON):  Call variantPush(values, newUnitsPerCarton)
+                        Call variantPush(colres, COLRE_SHIPPING_INFO):     Call variantPush(values, newShippingInfo)
+                        Call variantPush(colres, COLRE_SHIPMENT_REF_ID):   Call variantPush(values, newShipRefId)
+                        Call variantPush(colres, COLRE_INVOICE_ID):        Call variantPush(values, newInvId)
+                        Call variantPush(colres, COLRE_SCAC):              Call variantPush(values, newScac)
+                        Call variantPush(colres, COLRE_ACTUAL_SHIP_DATE):  Call variantPush(values, newActualShipDate)
+                        Call variantPush(colres, COLRE_ASN_ID):            Call variantPush(values, newProNum)
+                        Call variantPush(colres, COLRE_INVOICE_SUBMITTED): Call variantPush(values, newInvSub)
+                        Call variantPush(colres, COLRE_NOTES):             Call variantPush(values, newNotes)
+
+                        Dim palletValue As Variant
+                        palletValue = manifestData(s, col.re(COLRE_PALLETS))
+                        If palletValue = "" Then palletValue = 0
+                        Call variantPush(colres, COLRE_PALLETS): Call variantPush(values, palletValue)
+
+                        If col.re(COLRE_SHIPMENT_PALLETS) >= 1 Then
+                            newShipmentPallets = manifestData(r, col.re(COLRE_SHIPMENT_PALLETS))
+                            Call variantPush(colres, COLRE_SHIPMENT_PALLETS): Call variantPush(values, newShipmentPallets)
+                        End If
+                        
+                        If col.re(COLRE_SCHED_SHIP_DATE) >= 1 Then
+                            Call variantPush(colres, COLRE_SCHED_SHIP_DATE): Call variantPush(values, newSchedShipDate)
+                        End If
+
+                        Dim volumeValue As Variant
+                        volumeValue = manifestData(s, col.re(COLRE_TOTAL_VOLUME))
+                        If volumeValue = "" Then volumeValue = 0
+                        Call variantPush(colres, COLRE_TOTAL_VOLUME): Call variantPush(values, volumeValue)
+                        
+                        Dim weightValue As Variant
+                        weightValue = manifestData(s, col.re(COLRE_TOTAL_WEIGHT))
+                        If weightValue = "" Then weightValue = 0
+                        Call variantPush(colres, COLRE_TOTAL_WEIGHT): Call variantPush(values, weightValue)
+
+                        If newStatus <> "" Then
+                            Call variantPush(colres, COLRE_STATUS): Call variantPush(values, newStatus)
+                        End If
+
+                        Set ou = New UpdateObj: Call ou.cnstrcr(cPo, cSku, cOrdDt, colres, values)
+                        Call variantPush(ous, ou)
+                        Erase colres
+                        Erase values
+                        
+                        totalOrders = totalOrders + 1
+
+                        s = s + 1
+                        
+                        If s > UBound(manifestData, 1) Then
+                            continueLoop = False
+                        End If
+
+                    Else
+                        continueLoop = False
+                    End If
+                Wend
+            End If
+        End If
+
+        r = r + 1
+    Wend
+
+    If isVariantArrayInit(ous) = True Then
+        Call archive.updateOrders(ous)
+    Else
+        Call prompt_alert("No matches found!", "Archive Update Canceled")
+    End If
+
+    Dim finalMsg As String: finalMsg = "" 'exit msg for user
+    finalMsg = finalMsg & totalOrders & " total orders updated in Archive from this Manifest:" & endl(1)
+    Call prompt_alert(finalMsg, "Archive Update Completed")
+End Sub
+
+
+''''''''''''''''''''
+' 4.2
+''''''''''''''''''''
+Sub maint_updateAmazonWarehouses()
+    Dim procTitle As String: procTitle = "maint_updateAmazonWarehouses"
+    Dim activeWsName As String: activeWsName = ActiveSheet.name
+    If activeWsName = WS_WAREHOUSES_AMZ_NAME Then
+        ActiveWorkbook.Sheets(WS_WAREHOUSES_AMZ_NAME).Visible = False
+        ActiveWorkbook.Sheets(WS_NAME_MACROS).Activate
+    ElseIf activeWsName = WS_NAME_MACROS Then
+        ActiveWorkbook.Sheets(WS_WAREHOUSES_AMZ_NAME).Visible = True
+        ActiveWorkbook.Sheets(WS_WAREHOUSES_AMZ_NAME).Activate
+    End If
+End Sub
+
+
+''''''''''''''''''''
+' 4.3
+''''''''''''''''''''
+Sub maint_updateEWWarehouses()
+    Dim procTitle As String: procTitle = "maint_updateEWWarehouses"
+    Dim activeWsName As String: activeWsName = ActiveSheet.name
+    If activeWsName = WS_WAREHOUSES_EW_NAME Then
+        ActiveWorkbook.Sheets(WS_WAREHOUSES_EW_NAME).Visible = False
+        ActiveWorkbook.Sheets(WS_NAME_MACROS).Activate
+    ElseIf activeWsName = WS_NAME_MACROS Then
+        ActiveWorkbook.Sheets(WS_WAREHOUSES_EW_NAME).Visible = True
+        ActiveWorkbook.Sheets(WS_WAREHOUSES_EW_NAME).Activate
+    End If
+End Sub
+
+
+''''''''''''''''''''
+' 4.4
+''''''''''''''''''''
+Sub maint_updateCarriers()
+    Dim procTitle As String: procTitle = "maint_updateCarriers"
+    Dim activeWsName As String: activeWsName = ActiveSheet.name
+    If activeWsName = WS_NAME_CARRIERS Then
+        ActiveWorkbook.Sheets(WS_NAME_CARRIERS).Visible = False
+        ActiveWorkbook.Sheets(WS_NAME_MACROS).Activate
+    ElseIf activeWsName = WS_NAME_MACROS Then
+        ActiveWorkbook.Sheets(WS_NAME_CARRIERS).Visible = True
+        ActiveWorkbook.Sheets(WS_NAME_CARRIERS).Activate
+    End If
+End Sub
+
+
+''''''''''''''''''''
+' 4.5
+''''''''''''''''''''
+Sub maint_updateItems()
+    Dim procTitle As String: procTitle = "maint_updateItems"
+    Dim activeWsName As String: activeWsName = ActiveSheet.name
+    If activeWsName = WS_NAME_ITEMS Then
+        ActiveWorkbook.Sheets(WS_NAME_ITEMS).Visible = False
+        ActiveWorkbook.Sheets(WS_NAME_MACROS).Activate
+    ElseIf activeWsName = WS_NAME_MACROS Then
+        ActiveWorkbook.Sheets(WS_NAME_ITEMS).Visible = True
+        ActiveWorkbook.Sheets(WS_NAME_ITEMS).Activate
+    End If
+End Sub
+
+
+''''''''''''''''''''
+' 4.6
+''''''''''''''''''''
+Sub maint_updateHolidays()
+    Dim procTitle As String: procTitle = "maint_updateHolidays"
+    Dim activeWsName As String: activeWsName = ActiveSheet.name
+    If activeWsName = WS_NAME_HOLIDAYS Then
+        ActiveWorkbook.Sheets(WS_NAME_HOLIDAYS).Visible = False
+        ActiveWorkbook.Sheets(WS_NAME_MACROS).Activate
+    ElseIf activeWsName = WS_NAME_MACROS Then
+        ActiveWorkbook.Sheets(WS_NAME_HOLIDAYS).Visible = True
+        ActiveWorkbook.Sheets(WS_NAME_HOLIDAYS).Activate
+    End If
+End Sub
+
+
+''''''''''''''''''''
+' 4.7
+''''''''''''''''''''
+Sub maint_viewRRLog()
+    Dim procTitle As String: procTitle = "maint_viewRRLog"
+    Dim activeWsName As String: activeWsName = ActiveSheet.name
+    If activeWsName = WS_NAME_RRLOG Then
+        ActiveWorkbook.Sheets(WS_NAME_RRLOG).Visible = False
+        ActiveWorkbook.Sheets(WS_NAME_MACROS).Activate
+    ElseIf activeWsName = WS_NAME_MACROS Then
+        ActiveWorkbook.Sheets(WS_NAME_RRLOG).Visible = True
+        ActiveWorkbook.Sheets(WS_NAME_RRLOG).Activate
+    End If
+End Sub
+
+
+''''''''''''''''''''
+' 4.8
+''''''''''''''''''''
+Sub maint_updatePrinters()
+    Dim procTitle As String: procTitle = "maint_updatePrinters"
+    Dim activeWsName As String: activeWsName = ActiveSheet.name
+    If activeWsName = WS_NAME_PRINTERS Then
+        ActiveWorkbook.Sheets(WS_NAME_PRINTERS).Visible = False
+        ActiveWorkbook.Sheets(WS_NAME_MACROS).Activate
+    ElseIf activeWsName = WS_NAME_MACROS Then
+        ActiveWorkbook.Sheets(WS_NAME_PRINTERS).Visible = True
+        ActiveWorkbook.Sheets(WS_NAME_PRINTERS).Activate
+    End If
+End Sub
+
+
+''''''''''''''''''''
+' 4.9
+''''''''''''''''''''
+Sub maint_updateOnHandInventory()
+    Dim procTitle As String: procTitle = "maint_updateOnHandInventory"
+    Dim activeWsName As String: activeWsName = ActiveSheet.name
+    If activeWsName = WS_NAME_ON_HAND_INVENTORY Then
+        ActiveWorkbook.Sheets(WS_NAME_ON_HAND_INVENTORY).Visible = False
+        ActiveWorkbook.Sheets(WS_NAME_MACROS).Activate
+    ElseIf activeWsName = WS_NAME_MACROS Then
+        ActiveWorkbook.Sheets(WS_NAME_ON_HAND_INVENTORY).Visible = True
+        ActiveWorkbook.Sheets(WS_NAME_ON_HAND_INVENTORY).Activate
+    End If
+End Sub
+
+
+''''''''''''''''''''
+' 4.10
+''''''''''''''''''''
+Sub maint_updateEstimatedInventory()
+    Dim procTitle As String: procTitle = "maint_updateEstimatedInventory"
+    Dim activeWsName As String: activeWsName = ActiveSheet.name
+    If activeWsName = WS_NAME_EST_INVENTORY Then
+        ActiveWorkbook.Sheets(WS_NAME_EST_INVENTORY).Visible = False
+        ActiveWorkbook.Sheets(WS_NAME_MACROS).Activate
+    ElseIf activeWsName = WS_NAME_MACROS Then
+        ActiveWorkbook.Sheets(WS_NAME_EST_INVENTORY).Visible = True
+        ActiveWorkbook.Sheets(WS_NAME_EST_INVENTORY).Activate
+    End If
+End Sub
+
+
+''''''''''''''''''''
+' 4.11
+''''''''''''''''''''
+Sub maint_viewSchedShipTimes()
+    Dim procTitle As String: procTitle = "maint_viewSchedShipTimes"
+    Dim activeWsName As String: activeWsName = ActiveSheet.name
+    If activeWsName = WS_NAME_SCHED_SHIP_TIMES Then
+        ActiveWorkbook.Sheets(WS_NAME_SCHED_SHIP_TIMES).Visible = False
+        ActiveWorkbook.Sheets(WS_NAME_MACROS).Activate
+    ElseIf activeWsName = WS_NAME_MACROS Then
+        ActiveWorkbook.Sheets(WS_NAME_SCHED_SHIP_TIMES).Visible = True
+        ActiveWorkbook.Sheets(WS_NAME_SCHED_SHIP_TIMES).Activate
+    End If
+End Sub
+
+
+
