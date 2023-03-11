@@ -1,0 +1,49 @@
+### LOGIN TO VC ###
+loginTo_amazonVendorCentral()
+
+dateAndTime = datetime.datetime.today()
+dateAndTimeStr = dateAndTime.strftime("%y%m%d-%H%M%S")
+
+accounts = ['usa', 'can']
+#accounts = ['amzn1.vg.d.AAH2ZZILO3ZSFBAENTAL4YL4MOXA', 'amzn1.vg.d.ADTNYEWRXNYSYDNH4FZ5OGKITPXA']
+accountCountries = ['usa', 'can']
+
+### DL the CSV ###
+a = 0
+while a < len(accounts):
+
+  switchAccount_amazonVendorCentral(accounts[a])
+
+  print("a: " + str(a) + " " + str(accountCountries[a]))
+
+  get(driver, "https://vendorcentral.amazon.com/po/vendor/members/po-mgmt/confirmation", secsAfter = 2)
+
+  i(driver, 'ID', "select-all-checkbox", action = 'click')
+
+  try: #CLOSE THE FEEDBACK BUTTON IF NECESSARY
+   driver.find_element(By.ID, "hmd2f-exit").click() #feedback
+   driver.find_element(By.ID, "open-selected-po-btn").click() #open pos
+  except:
+    driver.find_element(By.ID, "open-selected-po-btn").click() #open pos
+  time.sleep(2)
+
+  i(driver, 'ID', "select-all-checkbox", action = 'click', secsBefore = 0.5, attempts = 5)
+  i(driver, 'CLASS_NAME', "indicator", action = 'click', secsAfter = 0.5, attempts = 5)
+  i(driver, 'XPATH', "//ul/li[@data-action='csv']", action = 'click', secsAfter = 3)
+
+  try:
+    newFileName = r'C:/Users/' + deviceUserName + '/Downloads/newPOsFile_' + str(accountCountries[a]) + dateAndTimeStr + '.csv'
+    list_of_files = glob.glob(r'C:/Users/' + deviceUserName + '/Downloads/*') #get all files in Downloads folder
+    latest_file = max(list_of_files, key = os.path.getctime)                  #get newest file in path
+    os.rename(latest_file, newFileName)                                       #rename DL'd file (so it prints in order)
+  except:
+    print(str(accountCountries[a]) + ": unable to rename")
+
+  #csv has been downloaded!
+  #now it needs to be uploaded manually
+
+  a = a + 1
+
+time.sleep(0.5)
+
+driver.quit() # Close Firefox
