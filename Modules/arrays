@@ -1,0 +1,925 @@
+'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Module: arrays
+
+'--- CONVERT
+'Function convert_1dArr_Str(ByVal arr As Variant, Optional delimeter As String = ", ", Optional borders As String = "[]") As Variant
+'Function convert_2dArr_Str(ByVal arr As Variant, Optional delimeter As String = ", ", Optional borders As String = "[]") As Variant
+'Function convert_Str_1dArr(ByVal str As String, Optional delimeter As String = ",") As Variant
+
+'--- DISPLAY
+'Sub      display_1dArr(ByVal arr As Variant)
+'Sub      display_2dArr(ByVal arr As Variant)
+
+'--- EMPTY
+'Function isVariantArrayInit(ByRef a As Variant) As Boolean
+'Sub      endIfNotInit(ByRef a As Variant, msg as string, Optional title As String = "")
+'--- PUSH
+'Sub      variantPush(ByRef a As Variant, ByVal element As Variant)
+'Function variant2dPush(ByVal a As Variant, Optional ByVal row1dArr As Variant = "[]", Optional increaseUBound1 As Integer = 0, Optional increaseUBound2 As Integer = 0) As Variant
+    'NOT FINISHED! need to handle cases where user wants to add data at same time as redim, esp when it's multiple rows
+    
+'--- REDIM
+'Function ReDimPreserve(arr As Variant, newBound1 As Integer, newUBound2 As Integer) As Variant
+    '-FROM https://wellsr.com/vba/2016/excel/dynamic-array-with-redim-preserve-vba/
+
+'--- SLICE / SPLICE
+'Function isoRow_from_2dArr(arr As Variant, rowIndex As Integer, Optional as2dArr As Boolean = False) As Variant
+'Function combine_1dArrs(arrA As Variant, arrB As Variant) As Variant
+'Function combine_2dArrs(arrA As Variant, arrB As Variant) As Variant
+
+'--- SORT
+'Sub      sortOrders(ByRef arr, ByVal fieldToSort As String, Optional ByVal direction As String = "desc")
+'Function sortOrderForManifest(ByVal arr As Variant, ByRef shipmentsSorted As Variant) As Variant
+'Function sortShipmentsForManifestAdjustment(ByVal arr As Variant, ByRef shipmentsSorted As Variant) As Variant
+'Function sortShipmentsByShipTimes(ByVal manifestName As String, ByRef shipmentsSorted As Variant) As Variant
+
+'--- SWAP
+'Sub swap(ByRef arr)
+
+'--- UNIQUE
+'Function unique(arr as Variant) as Variant
+
+'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+'--- OPTIONS
+Option Explicit
+Option Base 1
+
+
+'----------------------------------------------------
+'--- CONVERT
+'----------------------------------------------------
+Function convert_1dArr_Str(ByVal arr As Variant, Optional delimeter As String = ", ", Optional borders As String = "[]") As Variant
+    Dim str As String: str = Left(borders, 1)
+    
+    Dim x As Integer: x = LBound(arr)
+    
+    While x <= UBound(arr)
+        str = str & arr(x) & delimeter
+        x = x + 1
+    Wend
+    
+    str = Left(str, Len(str) - Len(delimeter))
+    str = str & Right(borders, 1)
+    
+    convert_1dArr_Str = str
+End Function
+
+Function convert_2dArr_Str(ByVal arr As Variant, Optional delimeter As String = ", ", Optional borders As String = "[]") As Variant
+
+    Dim str As String: str = Left(borders, 1)
+    
+    Dim x As Integer: x = LBound(arr, 1)
+    While x <= UBound(arr, 1)
+    
+        str = str & Left(borders, 1)
+        
+        Dim y As Integer: y = LBound(arr, 2)
+        While y <= UBound(arr, 2)
+            str = str & arr(x, y) & delimeter
+            y = y + 1
+        Wend
+        
+        str = Left(str, Len(str) - Len(delimeter))
+        str = str & Right(borders, 1) & delimeter
+        
+        x = x + 1
+    Wend
+    
+    str = Left(str, Len(str) - Len(delimeter))
+    str = str & Right(borders, 1)
+    
+    convert_2dArr_Str = str
+End Function
+
+Function convert_Str_1dArr(ByVal str As String, Optional delimeter As String = ",") As Variant
+    Dim arr As Variant
+    
+    Dim x As Integer: x = 1
+    Dim element As String: element = ""
+    
+    While x <= Len(str)
+    
+        Dim char As String: char = Mid(str, x, 1)
+        
+        If char = delimeter Or x = Len(str) Then
+            Call variantPush(arr, element)
+            element = ""
+        Else
+            element = element & char
+        End If
+
+        x = x + 1
+    Wend
+    
+    convert_Str_1dArr = arr
+End Function
+
+
+'----------------------------------------------------
+'--- DISPLAY
+'----------------------------------------------------
+Sub display_1dArr(ByVal arr As Variant)
+
+    Dim x As Integer: x = LBound(arr)
+    While x <= UBound(arr)
+        MsgBox ("x: " & x & " // arr(" & x & "): " & arr(x))
+        x = x + 1
+    Wend
+End Sub
+
+Sub display_2dArr(ByVal arr As Variant)
+
+    Dim x As Integer: x = LBound(arr, 1)
+    While x <= UBound(arr, 1)
+    
+        Dim y As Integer: y = LBound(arr, 2)
+        While y <= UBound(arr, 2)
+            MsgBox ("x: " & x & ", y: " & y & " // arr(" & x & ", " & y & "): " & arr(x, y))
+            y = y + 1
+        Wend
+        
+        x = x + 1
+    Wend
+End Sub
+
+
+'----------------------------------------------------
+'--- EMPTY
+'----------------------------------------------------
+Function isVariantArrayInit(ByRef a As Variant) As Boolean
+    On Error Resume Next
+    isVariantArrayInit = IsNumeric(UBound(a))
+    On Error GoTo 0
+End Function
+
+Sub endIfNotInit(ByRef a As Variant, msg As String, Optional title As String = "")
+    If isVariantArrayInit(a) = False Then
+        Call prompt_alert(msg, title)
+        End
+    End If
+End Sub
+
+
+'----------------------------------------------------
+'--- PUSH
+'----------------------------------------------------
+Sub variantPush(ByRef a As Variant, ByVal element As Variant)
+
+    If isVariantArrayInit(a) = False Then
+        ReDim a(1)
+        
+        'https://docs.microsoft.com/en-us/office/vba/language/reference/user-interface-help/vartype-function
+        If VarType(element) = 9 Or VarType(element) = 36 Then 'if it's an object or user-defiend type, then...
+            Set a(1) = element
+        Else
+            a(1) = element
+        End If
+        
+    Else
+        ReDim Preserve a(UBound(a) + 1)
+        
+        If VarType(element) = 9 Or VarType(element) = 36 Then
+            Set a(UBound(a)) = element
+        Else
+            a(UBound(a)) = element
+        End If
+        
+    End If
+End Sub
+
+Function variant2dPush(ByVal a As Variant, Optional ByVal row1dArr As Variant = "[]", Optional increaseUBound1 As Integer = 0, Optional increaseUBound2 As Integer = 0) As Variant
+
+    Dim newA As Variant
+    If isVariantArrayInit(a) = False Then
+
+        Dim UBound1 As Integer: UBound1 = 1
+        Dim UBound2 As Integer: UBound2 = 1
+        
+        If increaseUBound1 >= 2 Then UBound1 = increaseUBound1
+        If increaseUBound2 >= 2 Then UBound2 = increaseUBound2
+        ReDim newA(increaseUBound1, increaseUBound2)
+
+    Else
+        newA = ReDimPreserve(a, UBound(a, 1) + increaseUBound1, UBound(a, 2) + increaseUBound2)
+    End If
+
+    If VarType(row1dArr) <> vbString Then 'row1dArr <> "()" And row1dArr <> "[]" And row1dArr <> "{}" Then
+
+        Dim x As Integer: x = UBound(newA, 1)
+        Dim y As Integer: y = LBound(newA, 2)
+
+        While y <= UBound(a, 2)
+
+            If VarType(row1dArr(y)) = 9 Or VarType(row1dArr(y)) = 36 Then 'if it's an object or user-defiend type, then...
+                Set newA(x, y) = row1dArr(y)
+            Else
+                newA(x, y) = row1dArr(y)
+            End If
+        
+            y = y + 1
+        Wend
+    End If
+
+    variant2dPush = newA
+End Function
+
+
+'----------------------------------------------------
+'--- REDIM
+'----------------------------------------------------
+Function ReDimPreserve(arr As Variant, newBound1 As Integer, newUBound2 As Integer) As Variant
+
+    Dim x, y As Long
+    Dim oldUbound1, oldUbound2, oldLbound1, oldLbound2 As Integer
+    Dim tempArr() As Variant
+    
+    ReDimPreserve = False
+    
+    If Not IsArray(arr) Then MsgBox "You didn't pass the function an array.", vbCritical, "No Array Detected": End 'check if its in array first
+    
+    oldUbound1 = UBound(arr, 1): oldUbound2 = UBound(arr, 2)
+    oldLbound1 = LBound(arr, 1): oldLbound2 = LBound(arr, 2)
+    
+    ReDim tempArr(oldLbound1 To newBound1, oldLbound2 To newUBound2) 'create new array
+    
+    For x = LBound(arr, 1) To oldUbound1 'loop through first
+        For y = LBound(arr, 2) To oldUbound2
+            
+            If oldUbound1 >= x And oldUbound2 >= y Then 'if its in range,
+                tempArr(x, y) = arr(x, y) 'then append to new array the same way
+            End If
+        Next
+    Next
+    
+    If IsArray(tempArr) Then ReDimPreserve = tempArr
+End Function
+
+
+'----------------------------------------------------
+'--- SLICE / SPLICE
+'----------------------------------------------------
+Function isoRow_from_2dArr(arr As Variant, rowIndex As Integer, Optional as2dArr As Boolean = False) As Variant
+    Dim row As Variant
+    If as2dArr = True Then ReDim row(1, UBound(arr, 2))
+    If as2dArr = False Then ReDim row(UBound(arr, 2))
+
+    Dim x As Integer: x = LBound(arr, 2)
+    While x <= UBound(arr, 2)
+        Dim element As Variant: element = arr(rowIndex, x)
+        If as2dArr = True Then row(1, x) = element
+        If as2dArr = False Then row(x) = element
+        x = x + 1
+    Wend
+    
+    isoRow_from_2dArr = row
+End Function
+
+Function combine_1dArrs(arra As Variant, arrb As Variant) As Variant
+    Dim arrCombined As Variant
+    arrCombined = arra
+    ReDim Preserve arrCombined(UBound(arra, 1) + UBound(arrb, 1))
+    
+    Dim x As Integer:  x = UBound(arra, 1) + 1
+    Dim x2 As Integer: x2 = LBound(arrb, 1)
+
+    While x <= UBound(arrCombined)
+        arrCombined(x) = arrb(x2)
+        x = x + 1
+        x2 = x2 + 1
+    Wend
+    
+    combine_1dArrs = arrCombined
+End Function
+
+Function combine_2dArrs(arra As Variant, arrb As Variant) As Variant
+    Dim arrCombined As Variant
+    arrCombined = arra
+    arrCombined = ReDimPreserve(arrCombined, UBound(arra, 1) + UBound(arrb, 1), UBound(arra, 2))
+    
+    Dim x As Integer:  x = UBound(arra, 1) + 1
+    Dim x2 As Integer: x2 = LBound(arrb, 1)
+
+    While x <= UBound(arrCombined)
+        Dim y As Integer:  y = 1
+        While y <= UBound(arra, 2)
+            arrCombined(x, y) = arrb(x2, y)
+            y = y + 1
+        Wend
+        
+        x = x + 1
+        x2 = x2 + 1
+    Wend
+    
+    combine_2dArrs = arrCombined
+End Function
+
+
+'----------------------------------------------------
+'--- SORT
+'----------------------------------------------------
+Sub sortOrders(ByRef arr, ByVal fieldToSort As String, Optional ByVal direction As String = "desc")
+
+    Dim a As Integer: a = LBound(arr)
+    While a <= UBound(arr)
+
+        Dim b As Integer: b = a
+        While b <= UBound(arr)
+
+            Dim valA As Variant
+            Dim valB As Variant
+            
+            'OG
+            If fieldToSort = COLRE_PO Or LCase(fieldToSort) = "po" Then
+                valA = arr(a).po: valB = arr(b).po
+            ElseIf fieldToSort = COLRE_VENDOR Or LCase(fieldToSort) = "vendor" Then
+                valA = arr(a).vendor: valB = arr(b).vendor
+            ElseIf fieldToSort = COLRE_SHIPTOLOC Or _
+                   LCase(fieldToSort) = "shiptoloc" Or LCase(fieldToSort) = "shiptolocation" Or _
+                   LCase(fieldToSort) = "ship to loc" Or LCase(fieldToSort) = "ship to location" Then
+                valA = arr(a).shipToLoc: valB = arr(b).shipToLoc
+            ElseIf fieldToSort = COLRE_ASIN Or LCase(fieldToSort) = "asin" Then
+                valA = arr(a).asin: valB = arr(b).asin
+            ElseIf fieldToSort = COLRE_EXPECTED_QUANT Or _
+                   LCase(fieldToSort) = "quantity" Or LCase(fieldToSort) = "expected quantity" Or _
+                   LCase(fieldToSort) = "quantexp" Or LCase(fieldToSort) = "quantity expected" Then
+                valA = arr(a).quantExp: valB = arr(b).quantExp
+            ElseIf fieldToSort = COLRE_UNIT_COST Or _
+                   LCase(fieldToSort) = "unitcost" Or LCase(fieldToSort) = "unit cost" Then
+                valA = CDbl(arr(a).unitCost): valB = CDbl(arr(b).unitCost)
+                
+            ElseIf fieldToSort = COLRE_WINDOW_START Or _
+                   LCase(fieldToSort) = "shipwindowstart" Or LCase(fieldToSort) = "ship window start" Or _
+                   LCase(fieldToSort) = "windowstart" Or LCase(fieldToSort) = "window start" Then
+                valA = arr(a).windowStart: valB = arr(b).windowStart
+            ElseIf fieldToSort = COLRE_WINDOW_END Or _
+                   LCase(fieldToSort) = "shipwindowend" Or LCase(fieldToSort) = "ship window end" Or _
+                   LCase(fieldToSort) = "windowend" Or LCase(fieldToSort) = "window end" Then
+                valA = arr(a).windowEnd: valB = arr(b).windowEnd
+            'AFTER IMPORT
+            ElseIf fieldToSort = COLRE_ORDER_TYPE Or _
+                   LCase(fieldToSort) = "ordertype" Or LCase(fieldToSort) = "order type" Or _
+                   LCase(fieldToSort) = "type" Then
+                valA = arr(a).orderType: valB = arr(b).orderType
+            ElseIf fieldToSort = COLRE_SHIP_FROM_WAREHOUSE Or _
+                   LCase(fieldToSort) = "shipfromwarehouse" Or LCase(fieldToSort) = "shipfrom" Then
+                valA = arr(a).shipFromWarehouse: valB = arr(b).shipFromWarehouse
+            ElseIf fieldToSort = COLRE_SKU Or _
+                   LCase(fieldToSort) = "sku" Then
+                valA = arr(a).sku: valB = arr(b).sku
+            ElseIf fieldToSort = COLRE_PALLETS Or _
+                   LCase(fieldToSort) = "pallets" Or LCase(fieldToSort) = "pallet" Then
+                valA = arr(a).pallets: valB = arr(b).pallets
+            ElseIf fieldToSort = COLRE_UNITS_PER_CARTON Or _
+                   LCase(fieldToSort) = "unitspercarton" Or LCase(fieldToSort) = "units per carton" Then
+                valA = arr(a).unitsPerCarton: valB = arr(b).unitsPerCarton
+            ElseIf fieldToSort = COLRE_CARTONS Or _
+                   LCase(fieldToSort) = "carton" Or LCase(fieldToSort) = "cartons" Then
+                valA = arr(a).cartons: valB = arr(b).cartons
+            ElseIf fieldToSort = COLRE_TOTAL_WEIGHT Or _
+                   LCase(fieldToSort) = "weight" Then
+                valA = CDbl(arr(a).weight): valB = CDbl(arr(b).weight)
+            ElseIf fieldToSort = COLRE_TOTAL_VOLUME Or _
+                   LCase(fieldToSort) = "volume" Then
+                valA = CDbl(arr(a).volume): valB = CDbl(arr(b).volume)
+            ElseIf fieldToSort = COLRE_TOTAL_COST Or _
+                   LCase(fieldToSort) = "totalcost" Or LCase(fieldToSort) = "total cost" Then
+                valA = CDbl(arr(a).totalCost): valB = CDbl(arr(b).totalCost)
+            ElseIf fieldToSort = COLRE_BEST_SHIP_DATE Or _
+                   LCase(fieldToSort) = "bestshipdate" Or LCase(fieldToSort) = "best ship date" Then
+                valA = CDate(arr(a).bestShipDate): valB = CDate(arr(b).bestShipDate)
+            ElseIf fieldToSort = COLRE_SHIP_TO_COUNTRY Or _
+                   LCase(fieldToSort) = "shiptocountry" Or LCase(fieldToSort) = "ship to country" Then
+                valA = arr(a).shipToCountry: valB = arr(b).shipToCountry
+            ElseIf fieldToSort = COLRE_ORDER_DATE Or _
+                   LCase(fieldToSort) = "orderdate" Or LCase(fieldToSort) = "order date" Then
+                valA = CDate(arr(a).orderDate): valB = CDate(arr(b).orderDate)
+            ElseIf fieldToSort = COLRE_STATUS Or _
+                   LCase(fieldToSort) = "status" Then
+                valA = arr(a).status: valB = arr(b).status
+            'AFTER ADDED TO SHIPMENT
+            ElseIf fieldToSort = COLRE_ARN Or _
+                   LCase(fieldToSort) = "arn" Then
+                valA = arr(a).arnNum: valB = arr(b).arnNum
+            ElseIf fieldToSort = COLRE_CARRIER Or _
+                   LCase(fieldToSort) = "carrier" Then
+                valA = arr(a).carrier: valB = arr(b).carrier
+            ElseIf fieldToSort = COLRE_SCAC Or _
+                   LCase(fieldToSort) = "scac" Then
+                valA = arr(a).scac: valB = arr(b).scac
+            ElseIf fieldToSort = COLRE_ACTUAL_SHIP_DATE Or _
+                   LCase(fieldToSort) = "actualshipdate" Or LCase(fieldToSort) = "actual ship date" Then
+                valA = arr(a).actualShipDate: valB = arr(b).actualShipDate
+            ElseIf fieldToSort = COLRE_ASN_ID Or _
+                   LCase(fieldToSort) = "asn num" Or LCase(fieldToSort) = "pro num" Or _
+                   LCase(fieldToSort) = "asnnum" Or LCase(fieldToSort) = "pronum" Or _
+                   LCase(fieldToSort) = "asn id" Or LCase(fieldToSort) = "pro id" Or _
+                   LCase(fieldToSort) = "asnid" Or LCase(fieldToSort) = "proid" Then
+                valA = arr(a).asn: valB = arr(b).asn
+            ElseIf fieldToSort = COLRE_ASN_SUBMITTED Or _
+                   LCase(fieldToSort) = "asn sub" Or LCase(fieldToSort) = "asnsub" Or _
+                   LCase(fieldToSort) = "asn submitted" Or LCase(fieldToSort) = "asnsubmitted" Then
+                valA = arr(a).asnSub: valB = arr(b).asnSub
+            ElseIf fieldToSort = COLRE_INVOICE_SUBMITTED Or _
+                   LCase(fieldToSort) = "inv sub" Or LCase(fieldToSort) = "invoice sub" Or _
+                   LCase(fieldToSort) = "inv submitted" Or LCase(fieldToSort) = "invoice submitted" Or _
+                   LCase(fieldToSort) = "invsub" Or LCase(fieldToSort) = "invoicesub" Or _
+                   LCase(fieldToSort) = "invsubmitted" Or LCase(fieldToSort) = "invoicesubmitted" Then
+                valA = arr(a).invSub: valB = arr(b).invSub
+            ElseIf fieldToSort = COLRE_NOTES Or _
+                   LCase(fieldToSort) = "note" Or LCase(fieldToSort) = "notes" Then
+                valA = CStr(arr(a).notes): valB = CStr(arr(b).notes)
+            ElseIf fieldToSort = COLRE_SHIPMENT_PALLETS Or _
+                   LCase(fieldToSort) = "shipmentpallets" Or LCase(fieldToSort) = "shipment pallets" Or _
+                   LCase(fieldToSort) = "palletsinshipment" Or LCase(fieldToSort) = "pallets in shipments" Then
+                valA = CInt(arr(a).palletsInShipment): valB = CInt(arr(b).palletsInShipment)
+            ElseIf fieldToSort = COLRE_SCHED_SHIP_DATE Or _
+                   LCase(fieldToSort) = "scheduled ship date" Or LCase(fieldToSort) = "scheduledshipdate" Or _
+                   LCase(fieldToSort) = "sched ship date" Or LCase(fieldToSort) = "schedshipdate" Or _
+                   LCase(fieldToSort) = "sched shipdate" Or LCase(fieldToSort) = "scheduled shipdate" Then
+                valA = CDate(arr(a).scheduledShipDate): valB = CDate(arr(b).scheduledShipDate)
+
+            ElseIf fieldToSort = COLRE_BO_CAUSE Or _
+                   LCase(fieldToSort) = "backorder cause" Or LCase(fieldToSort) = "back order cause" Or _
+                   LCase(fieldToSort) = "backordercause" Or LCase(fieldToSort) = "bocause" Or _
+                   LCase(fieldToSort) = "bo cause" Or LCase(fieldToSort) = "cause of backorder" Then
+                valA = CDate(arr(a).boCause): valB = CDate(arr(b).boCause)
+            ElseIf fieldToSort = COLRE_BO_CORRECTIVE_ACTION Or _
+                   LCase(fieldToSort) = "backorder correctiveaction" Or LCase(fieldToSort) = "back order corrective action" Or _
+                   LCase(fieldToSort) = "backorder corrective action" Or LCase(fieldToSort) = "back order correctiveaction" Or _
+                   LCase(fieldToSort) = "backordercorrectiveaction" Or LCase(fieldToSort) = "bocorrectiveaction" Or _
+                   LCase(fieldToSort) = "bo correctiveaction" Or LCase(fieldToSort) = "bo corrective action" Then
+                valA = CDate(arr(a).boCorrectiveAction): valB = CDate(arr(b).boCorrectiveAction)
+            ElseIf fieldToSort = COLRE_OWNER Or _
+                   LCase(fieldToSort) = "scheduled ship date" Or LCase(fieldToSort) = "scheduledshipdate" Or _
+                   LCase(fieldToSort) = "sched ship date" Or LCase(fieldToSort) = "schedshipdate" Or _
+                   LCase(fieldToSort) = "sched shipdate" Or LCase(fieldToSort) = "scheduled shipdate" Then
+                valA = CDate(arr(a).owner): valB = CDate(arr(b).owner)
+            End If
+
+            Dim temp As order
+            If direction = "asc" Then
+            
+                If valA >= valB Then
+                    Set temp = arr(b)
+                    Set arr(b) = arr(a)
+                    Set arr(a) = temp
+                End If
+                
+            ElseIf direction = "desc" Then
+            
+                If valA <= valB Then
+                    Set temp = arr(b)
+                    Set arr(b) = arr(a)
+                    Set arr(a) = temp
+                End If
+                
+            End If
+            
+            b = b + 1
+        Wend
+
+        a = a + 1
+    Wend
+End Sub
+
+Function sortOrderForManifest(ByVal arr As Variant, ByRef shipmentsSorted As Variant) As Variant
+
+    'sort
+    Call sortOrders(arr, "expected quantity", "desc")
+    Call sortOrders(arr, "po", "asc")
+    Call sortOrders(arr, "sku", "desc")
+    Call sortOrders(arr, "shipToLocation", "asc")
+    
+    'group
+    Dim sorted As Variant
+    Dim i As Integer: i = LBound(arr)
+    Dim shipments As Variant
+
+    While i <= UBound(arr)
+    
+        Dim orders As Variant
+        
+        Dim currShipToLoc As String: currShipToLoc = arr(i).shipToLoc
+
+        Dim isLTL As Boolean
+        If arr(i).pallets = 0 Then
+            isLTL = False
+        Else
+            isLTL = True
+        End If
+
+        Dim g As Integer: g = i
+        Dim j As Integer: j = 0
+        Dim contLoop As Boolean: contLoop = True
+        Dim cumulativeWeight As Double: cumulativeWeight = 0
+
+        While g <= UBound(arr) And _
+              contLoop = True
+
+            If currShipToLoc = arr(g).shipToLoc And _
+                 ((isLTL = True And arr(g).pallets >= 1) Or _
+                  (isLTL = False And arr(g).pallets = 0)) Then
+            
+                Call variantPush(orders, arr(g))
+                
+                cumulativeWeight = cumulativeWeight + arr(g).weight
+                g = g + 1
+                j = j + 1
+            Else
+                contLoop = False
+            End If
+            
+        Wend
+
+        Dim shipment As shipment: Set shipment = New shipment: Call shipment.constructor(orders)
+        Call variantPush(shipments, shipment)
+        
+        Erase orders
+        
+        If j = 0 Then
+            i = i + 1
+        Else
+            i = i + j
+        End If
+    Wend
+    
+    'sort group by pallets
+    Dim a As Integer: a = LBound(shipments)
+    While a <= UBound(shipments)
+    
+        Dim b As Integer: b = a
+        While b <= UBound(shipments)
+        
+            If shipments(a).totalPallets >= shipments(b).totalPallets Then
+                Dim temp As Variant: Set temp = shipments(a)
+                Set shipments(a) = shipments(b)
+                Set shipments(b) = temp
+            End If
+            
+            b = b + 1
+        Wend
+        
+        a = a + 1
+    Wend
+    
+    'sort group by first first sku
+    a = LBound(shipments)
+    While a <= UBound(shipments)
+    
+        b = a
+        While b <= UBound(shipments)
+        
+            If shipments(a).firstSku <= shipments(b).firstSku Then
+                Set temp = shipments(a)
+                Set shipments(a) = shipments(b)
+                Set shipments(b) = temp
+            End If
+            
+            b = b + 1
+        Wend
+        
+        a = a + 1
+    Wend
+
+    'sort group by line items
+    a = LBound(shipments)
+    While a <= UBound(shipments)
+    
+        b = a
+        While b <= UBound(shipments)
+        
+            If UBound(shipments(a).orders) >= UBound(shipments(b).orders) Then
+                Set temp = shipments(a)
+                Set shipments(a) = shipments(b)
+                Set shipments(b) = temp
+            End If
+            
+            b = b + 1
+        Wend
+        
+        a = a + 1
+    Wend
+
+    'seperate ltl and sp
+    Dim ltl As Variant
+    Dim sp As Variant
+
+    a = LBound(shipments)
+    While a <= UBound(shipments)
+
+        If shipments(a).totalPallets = 0 Then
+            Call variantPush(sp, shipments(a))
+        Else
+            Call variantPush(ltl, shipments(a))
+        End If
+        
+        a = a + 1
+    Wend
+
+    If isVariantArrayInit(ltl) = True Then
+        a = LBound(ltl)
+        While a <= UBound(ltl)
+            Call variantPush(shipmentsSorted, ltl(a))
+            a = a + 1
+        Wend
+    End If
+    
+    If isVariantArrayInit(sp) = True Then
+        a = LBound(sp)
+        While a <= UBound(sp)
+            Call variantPush(shipmentsSorted, sp(a))
+            a = a + 1
+        Wend
+    End If
+
+    sortOrderForManifest = shipmentsSorted
+End Function
+
+Function sortShipmentsForAdjustment(ByVal manifestName As String, ByRef shipmentsSorted As Variant) As Variant
+
+    'get manifest data
+    Dim data As Variant:      data = getValues(manifestName, 1, 1, 0, 0)
+    Dim headerRow As Variant: headerRow = isoRow_from_2dArr(data, WS_MANIFEST_HEADER_ROW, False)
+    
+    Dim col As col: Set col = New col: Call col.constructor(headerRow)
+    Dim colArn As Integer: colArn = col.re(COLRE_ARN)
+    Dim colPo As Integer: colPo = col.re(COLRE_PO)
+    
+    'turn each row into order and 'turn orders into variant array of shipments
+    Dim manifestCols As Integer: manifestCols = UBound(data, 2)
+    Dim shipments As Variant
+
+    Dim i As Integer: i = WS_MANIFEST_FIRST_ROW
+    While i <= UBound(data, 1)
+
+        Dim orders As Variant
+        Dim arn As String: arn = data(i, colArn)
+        
+        Dim g As Integer: g = i
+        Dim j As Integer: j = 0
+        Dim contLoop As Boolean: contLoop = True
+
+        While g <= UBound(data, 1) And _
+              contLoop = True
+
+            Dim currArn As String: currArn = data(g, colArn)
+            Dim currPo As String: currPo = data(i, colPo)
+            
+            If (currArn = arn Or currArn = "") And _
+                currPo <> "" Then
+            
+                Dim dataRow As Variant: dataRow = isoRow_from_2dArr(data, g)
+                Dim order As order: Set order = New order: Call order.constructor(dataRow, headerRow)
+                Call variantPush(orders, order)
+                
+                g = g + 1
+                j = j + 1
+            Else
+                contLoop = False
+            End If
+        Wend
+
+        Dim shipment As shipment: Set shipment = New shipment: Call shipment.constructor(orders)
+        Call variantPush(shipments, shipment)
+        Erase orders
+
+        If j = 0 Then
+            i = i + 1
+        Else
+            i = i + j
+        End If
+    Wend
+
+    'sort group by country
+    Dim a As Integer: a = LBound(shipments)
+    While a <= UBound(shipments)
+    
+        Dim b As Integer: b = a
+        While b <= UBound(shipments)
+        
+            If shipments(a).shipToCountry >= shipments(b).shipToCountry Then
+                Dim temp As Variant: Set temp = shipments(a)
+                Set shipments(a) = shipments(b)
+                Set shipments(b) = temp
+            End If
+            
+            b = b + 1
+        Wend
+        
+        a = a + 1
+    Wend
+
+    'sort group by carrier
+    a = LBound(shipments)
+    While a <= UBound(shipments)
+    
+        b = a
+        While b <= UBound(shipments)
+        
+            If shipments(a).carrier >= shipments(b).carrier Then
+                Set temp = shipments(a)
+                Set shipments(a) = shipments(b)
+                Set shipments(b) = temp
+            End If
+            
+            b = b + 1
+        Wend
+        
+        a = a + 1
+    Wend
+
+    a = LBound(shipments)
+    While a <= UBound(shipments)
+        Call variantPush(shipmentsSorted, shipments(a))
+        a = a + 1
+    Wend
+
+    sortShipmentsForAdjustment = shipments
+End Function
+
+Function sortShipmentsByShipTimes(ByVal manifestName As String, ByRef shipmentsSorted As Variant) As Variant
+
+    'get manifest data
+    Dim data As Variant:      data = getValues(manifestName, 1, 1, 0, 0)
+    Dim headerRow As Variant: headerRow = isoRow_from_2dArr(data, WS_MANIFEST_HEADER_ROW, False)
+    
+    Dim col As col: Set col = New col: Call col.constructor(headerRow)
+    Dim colArn As Integer: colArn = col.re(COLRE_ARN)
+    Dim colPo As Integer: colPo = col.re(COLRE_PO)
+    
+    'turn each row into order and 'turn orders into variant array of shipments
+    Dim manifestCols As Integer: manifestCols = UBound(data, 2)
+    Dim shipments As Variant
+
+    Dim i As Integer: i = WS_MANIFEST_FIRST_ROW
+    While i <= UBound(data, 1)
+
+        Dim orders As Variant
+        Dim arn As String: arn = data(i, colArn)
+        
+        Dim g As Integer: g = i
+        Dim j As Integer: j = 0
+        Dim contLoop As Boolean: contLoop = True
+
+        While g <= UBound(data, 1) And _
+              contLoop = True
+
+            Dim currArn As String: currArn = data(g, colArn)
+            Dim currPo As String: currPo = data(i, colPo)
+            
+            If (currArn = arn Or currArn = "") And _
+                currPo <> "" Then
+            
+                Dim dataRow As Variant: dataRow = isoRow_from_2dArr(data, g)
+                Dim order As order: Set order = New order: Call order.constructor(dataRow, headerRow)
+                Call variantPush(orders, order)
+                
+                g = g + 1
+                j = j + 1
+            Else
+                contLoop = False
+            End If
+        Wend
+
+        Dim shipment As shipment: Set shipment = New shipment: Call shipment.constructor(orders)
+        Call variantPush(shipments, shipment)
+        Erase orders
+
+        If j = 0 Then
+            i = i + 1
+        Else
+            i = i + j
+        End If
+    Wend
+
+    'sort group by truck num
+    Dim a As Integer: a = LBound(shipments)
+    While a <= UBound(shipments)
+    
+        Dim b As Integer: b = a
+        While b <= UBound(shipments)
+        
+            If shipments(a).shipToCountry >= shipments(b).shipToCountry Then
+                Dim temp As Variant: Set temp = shipments(a)
+                Set shipments(a) = shipments(b)
+                Set shipments(b) = temp
+            End If
+            
+            b = b + 1
+        Wend
+        
+        a = a + 1
+    Wend
+
+    'sort group by sched ship date
+    a = LBound(shipments)
+    While a <= UBound(shipments)
+    
+        b = a
+        While b <= UBound(shipments)
+        
+            If shipments(a).carrier >= shipments(b).carrier Then
+                Set temp = shipments(a)
+                Set shipments(a) = shipments(b)
+                Set shipments(b) = temp
+            End If
+            
+            b = b + 1
+        Wend
+        
+        a = a + 1
+    Wend
+
+    a = LBound(shipments)
+    While a <= UBound(shipments)
+        Call variantPush(shipmentsSorted, shipments(a))
+        a = a + 1
+    Wend
+
+    sortShipmentsForAdjustment = shipments
+End Function
+
+
+'----------------------------------------------------
+'--- SWAP
+'----------------------------------------------------
+Sub swap(ByRef arr)
+
+    If isVariantArrayInit(arr) = True Then
+
+        Dim midway As Integer: midway = UBound(arr) / 2
+        
+        Dim i As Integer: i = LBound(arr)
+        While i <= midway
+        
+            Dim loIndex As Integer: loIndex = i
+            Dim hiIndex As Integer: hiIndex = UBound(arr) - (i - 1)
+            
+            If loIndex <> hiIndex Then
+            
+                Dim temp As Variant
+
+                If VarType(arr(loIndex)) = vbObject Or VarType(arr(loIndex)) = vbDataObject Or VarType(arr(loIndex)) = vbUserDefinedType Then
+                    Set temp = arr(loIndex)
+                Else
+                    temp = arr(loIndex)
+                End If
+  
+                If VarType(arr(hiIndex)) = vbObject Or VarType(arr(hiIndex)) = vbDataObject Or VarType(arr(hiIndex)) = vbUserDefinedType Then
+                    Set arr(loIndex) = arr(hiIndex)
+                Else
+                    arr(loIndex) = arr(hiIndex)
+                End If
+                
+                If VarType(temp) = vbObject Or VarType(temp) = vbDataObject Or VarType(temp) = vbUserDefinedType Then
+                    Set arr(hiIndex) = temp
+                Else
+                    arr(hiIndex) = temp
+                End If
+                
+            End If
+            
+            i = i + 1
+        Wend
+    End If
+End Sub
+
+
+'----------------------------------------------------
+'--- UNIQUE
+'----------------------------------------------------
+Function unique(arr As Variant) As Variant
+
+    Dim uniqueArr As Variant
+    
+    Dim a As Integer: a = LBound(arr)
+    While a <= UBound(arr)
+    
+        Dim uniqueVal As Boolean: uniqueVal = True
+        
+        If isVariantArrayInit(uniqueArr) = True Then
+        
+            Dim b As Integer: b = LBound(uniqueArr)
+            While b <= UBound(uniqueArr) And uniqueVal = True
+            
+                If arr(a) = uniqueArr(b) Then
+                    uniqueVal = False
+                End If
+                
+                b = b + 1
+            Wend
+        End If
+        
+        If uniqueVal = True Then
+            Call variantPush(uniqueArr, arr(a))
+        End If
+        
+        a = a + 1
+    Wend
+    
+    unique = uniqueArr
+End Function
+
+
+
