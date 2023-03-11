@@ -1,0 +1,210 @@
+'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Module: prompts
+
+'--- SIMPLE PROMPTS
+'Sub      prompt_alert(msg As String, Optional title As String = "")
+'Sub      prompt_alert_quit(msg As String, Optional title As String = "")
+'Function prompt_okCancel(msg As String, Optional title As String = "") As Integer
+
+'--- TEXT INPUT
+'Function prompt_input(msg As String, Optional title As String = "", Optional trim As Boolean = True, Optional strCase As String = "") As Variant
+'Function prompt_input_int(msg As String, Optional title As String = "") As Integer
+'Function prompt_inputSplitList(msg As String, Optional title As String = "", Optional delimeter As String = "", Optional trim As Boolean = True, Optional strCase As String = "") As Variant
+'Function prompt_inputSplitListInt(msg As String, Optional title As String = "", Optional delimeter As String = "", Optional trim As Boolean = True, Optional strCase As String = "") As Variant
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+'--- OPTIONS
+Option Explicit
+Option Base 1
+
+
+'----------------------------------------------------
+'--- SIMPLE PROMPTS
+'----------------------------------------------------
+Sub prompt_alert(msg As String, Optional title As String = "")
+    Call MsgBox(msg, vbOKOnly, title)
+End Sub
+
+Sub prompt_alert_quit(msg As String, Optional title As String = "")
+    Call MsgBox(msg, vbOKOnly, title)
+    End
+End Sub
+
+Function prompt_okCancel(msg As String, Optional title As String = "") As Integer
+    Dim result As Integer: result = MsgBox(msg, vbOKCancel, title)
+    prompt_okCancel = result
+End Function
+
+
+'----------------------------------------------------
+'--- TEXT INPUT
+'----------------------------------------------------
+Function prompt_input(msg As String, Optional title As String = "", Optional trimStr As Boolean = True, Optional strCase As String = "") As Variant
+
+    Dim result As Variant: result = InputBox(msg, title)
+
+    If result = "" Then
+        Dim errorHandle As Variant
+        errorHandle = ERROR_QUIT_PROCEDURE
+        prompt_input = errorHandle
+        Exit Function
+    End If
+
+    If trimStr = True Then result = trim(result)
+    If LCase(strCase) = "upper" Then result = UCase(result)
+    If LCase(strCase) = "lower" Then result = LCase(result)
+    
+    prompt_input = result
+End Function
+
+Function prompt_input_int(msg As String, Optional title As String = "", _
+                          Optional limitToRange As Boolean = False, Optional lRange As Integer, Optional uRange As Integer) As Integer
+     
+    Dim validChoice As Boolean: validChoice = False
+    
+    'get ask user for ew warehouse choice
+    While validChoice = False
+    
+        Dim result As Variant: result = InputBox(msg, title)
+        If result = "" Then
+            MsgBox ("Operation canceled.")
+            End
+        End If
+
+        If IsNumeric(result) = True Then
+        
+            If CDbl(result) - CInt(result) = 0 Then
+                validChoice = True
+            Else
+                validChoice = False
+            End If
+            
+            If limitToRange = True And validChoice = True Then
+                If CInt(result) >= lRange And _
+                   CInt(result) <= uRange Then
+                    validChoice = True
+                Else
+                    validChoice = False
+                End If
+            End If
+            
+                If CDbl(result) - CInt(result) = 0 Then
+                    validChoice = True
+                Else
+                    validChoice = False
+                End If
+                
+                If limitToRange = True And validChoice = True Then
+                    If CInt(result) < lRange Or _
+                       CInt(result) > uRange Then
+
+                        validChoice = False
+                    Else
+                        validChoice = True
+                    End If
+                End If
+        Else
+            validChoice = False
+        End If
+        
+        If validChoice = False Then
+            Call prompt_alert("Invalid Choice. Please try again.", "Error")
+        End If
+        
+    Wend
+    
+    prompt_input_int = result
+End Function
+ 
+Function prompt_inputSplitList(msg As String, Optional title As String = "", Optional delimeter As String = ",", _
+                                      Optional trimStr As Boolean = True, Optional strCase As String = "") As Variant
+
+    Dim result As Variant: result = InputBox(msg, title)
+    
+    If result = "" Then
+        Dim errorHandle(1) As Variant
+        errorHandle(1) = ERROR_QUIT_PROCEDURE
+        prompt_inputSplitList = errorHandle
+        Exit Function
+    End If
+
+    Dim splitstr As Variant: splitstr = SplitBase1(result, delimeter)
+    
+    If IsEmpty(splitstr) = False Then
+    
+        Dim i As Integer
+        
+        For i = LBound(splitstr, 1) To UBound(splitstr, 1)
+            
+            If trimStr = True Then splitstr(i) = trim(splitstr(i))
+            If LCase(strCase) = "upper" Then splitstr(i) = UCase(splitstr(i))
+            If LCase(strCase) = "lower" Then splitstr(i) = LCase(splitstr(i))
+        Next i
+    Else
+        If trimStr = True Then result = trim(result)
+        If LCase(strCase) = "upper" Then result = UCase(result)
+        If LCase(strCase) = "lower" Then result = LCase(result)
+        splitstr(1) = result
+    End If
+
+    prompt_inputSplitList = splitstr
+End Function
+
+Function prompt_inputSplitList_int(msg As String, Optional title As String = "", Optional delimeter As String = ",", _
+                                   Optional limitToRange As Boolean = False, Optional lRange As Integer, Optional uRange As Integer) As Variant
+    Dim trim As Boolean: trim = True
+
+    Dim validChoice As Boolean: validChoice = False
+
+    While validChoice = False
+
+        Dim result As Variant: result = InputBox(msg, title)
+        If result = "" Then
+            MsgBox ("Operation canceled.")
+            End
+        End If
+        
+        Dim results As Variant: results = SplitBase1(result, delimeter, trim)
+
+        Dim c As Integer: c = LBound(results)
+        Dim endLoop As Boolean: endLoop = False
+        
+        While c <= UBound(results) And _
+              endLoop = False
+
+            If IsNumeric(results(c)) = True Then
+            
+                If CDbl(results(c)) - CInt(results(c)) = 0 Then
+                    validChoice = True
+                Else
+                    endLoop = True
+                    validChoice = False
+                End If
+                
+                If limitToRange = True And validChoice = True Then
+                    If CInt(results(c)) < lRange Or _
+                       CInt(results(c)) > uRange Then
+                        endLoop = True
+                        validChoice = False
+                    Else
+                        validChoice = True
+                    End If
+                End If
+            Else
+                endLoop = True
+                validChoice = False
+            End If
+        
+            c = c + 1
+        Wend
+
+        If validChoice = False Then
+            Call prompt_alert("Invalid Choice. Please try again.", "Error")
+        End If
+    Wend
+    
+    prompt_inputSplitList_int = results
+End Function
+
+
+
