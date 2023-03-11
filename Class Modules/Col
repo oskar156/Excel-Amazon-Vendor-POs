@@ -1,0 +1,152 @@
+'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Class: Col
+
+'--- FIELDS
+
+'--- CONSTRUCTOR
+'Public Sub constructor(headerRow_1dArr As Variant)
+
+'--- METHODS
+'Public  Function search(str As String) As Integer
+'Public  Function re(regexPattern As String) As Integer
+'Private Sub      m_addCol(colName As String, colIndex As Integer)
+
+'--- GET/LET/SET
+
+'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+'--- CLASS DEPENDENCIES
+'Class RegExp
+    'in re()
+    
+'--- OPTIONS
+Option Explicit
+Option Base 1
+
+
+'----------------------------------------------------
+'--- FIELDS
+'----------------------------------------------------
+Private m_colNames As Variant
+Private m_colIndices As Variant
+
+
+'----------------------------------------------------
+'--- CONSTRUCTOR
+'----------------------------------------------------
+
+Public Sub constructor(ByRef headerRow_1dArr As Variant)
+    Dim x As Integer: x = LBound(headerRow_1dArr)
+    While x <= UBound(headerRow_1dArr)
+        Dim val As String: val = headerRow_1dArr(x)
+        Call m_addCol(val, x)
+        x = x + 1
+    Wend
+End Sub
+
+
+'----------------------------------------------------
+'--- METHODS
+'----------------------------------------------------
+
+Public Function search(str As String) As Integer
+    Dim matchFound As Boolean: matchFound = False
+    Dim x As Integer: x = LBound(m_colNames)
+    
+    While x <= UBound(m_colNames) And _
+          matchFound = False
+          
+        If m_colNames(x) = str Then
+            matchFound = True
+        Else
+            x = x + 1
+        End If
+    Wend
+    
+    If x > UBound(m_colNames) Then x = -1
+    
+    search = x
+End Function
+Public Function re(ByRef regexPattern As String) As Integer
+
+    'SETTING UP THE REGEX PATTERN
+    Dim regex As Object: Set regex = New RegExp
+    Dim globalFlag As Boolean:     globalFlag = False
+    Dim ignoreCaseFlag As Boolean: ignoreCaseFlag = False
+    Dim multiLineFlag As Boolean:  multiLineFlag = False
+    Dim flags As Integer: flags = 0
+    
+    If (Left(regexPattern, 1) = "/") Then
+    
+        Dim c As Integer: c = 0
+        While c < Len(regexPattern) And _
+              Right(Left(regexPattern, Len(regexPattern) - c), 1) <> "/"
+            
+            Dim char As String: char = Right(Left(regexPattern, Len(regexPattern) - c), 1)
+
+            If char = "g" Then globalFlag = True
+            If char = "i" Then ignoreCaseFlag = True
+            If char = "m" Then multiLineFlag = True
+            
+            flags = flags + 1
+            c = c + 1
+        Wend
+    End If
+
+    regexPattern = Right(regexPattern, Len(regexPattern) - 1)
+    regexPattern = Left(regexPattern, Len(regexPattern) - (1 + flags))
+
+    If globalFlag = True Then regex.Global = True
+    If ignoreCaseFlag = True Then regex.ignoreCase = True
+    If multiLineFlag = True Then regex.multiLine = True
+
+    'LOOKING FOR A REGEX MATCH
+    Dim matchFound As Boolean: matchFound = False
+    Dim x As Integer: x = LBound(m_colNames)
+    
+    While x <= UBound(m_colNames) And _
+          matchFound = False
+          
+        Dim matches As Object
+        Dim match As Object
+    
+        regex.Pattern = regexPattern
+        Set matches = regex.execute(m_colNames(x))
+    
+        For Each match In matches:
+            matchFound = True
+        Next
+        
+        If matchFound = False Then
+            x = x + 1
+        End If
+    Wend
+    
+    If x > UBound(m_colNames) Then x = -1
+    
+    re = x
+End Function
+Private Sub m_addCol(colName As String, colIndex As Integer)
+
+    If IsEmpty(m_colNames) = False Then ReDim Preserve m_colNames(UBound(m_colNames) + 1)
+    If IsEmpty(m_colNames) = True Then ReDim m_colNames(1)
+
+    If IsEmpty(m_colIndices) = False Then ReDim Preserve m_colIndices(UBound(m_colIndices) + 1)
+    If IsEmpty(m_colIndices) = True Then ReDim m_colIndices(1)
+
+    m_colNames(UBound(m_colNames)) = colName
+    m_colIndices(UBound(m_colIndices)) = colIndex
+End Sub
+
+
+'----------------------------------------------------
+'--- GET/LET/SET
+'----------------------------------------------------
+Public Property Let colNames(colNames As String): m_colNames = colNames: End Property
+Public Property Get colNames() As String: colNames = m_colNames: End Property
+
+Public Property Let colIndices(colIndices As String): m_colIndices = colIndices: End Property
+Public Property Get colIndices() As String: colIndices = m_colIndices: End Property
+
+
+
