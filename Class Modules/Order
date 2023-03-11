@@ -1,0 +1,697 @@
+'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Class: Order
+
+'--- FIELDS
+'Private headerRow As Variant
+'Private OG...
+'Private AFTER IMPORT...
+'Private AFTER ADDED TO SHIPMENT...
+
+'--- CONSTRUCTOR
+'Public Sub constructor(ByRef dataRow As Variant, ByRef headerRow As Variant, Optional firstTimeImport As Boolean = False, _
+                        Optional shipFromWarehouse As String = "", Optional orderType As String = "regular", Optional ByRef itemsData As Variant)
+
+'--- DEF METHODS
+'Public Function defSku(Optional sku As String = "") As String
+'Public Function defPallets(itemsData As Variant, Optional sku As String = "", Optional quantExp As Integer = 0) As Integer
+'Public Function defUnitsPerCarton(itemsData As Variant, Optional sku As String = "") As Integer
+'Public Function defCartons(Optional quantExp As Integer = 0, Optional unitsPerCarton As Integer = 0) As Integer
+'Public Function defWeight(itemsData As Variant, Optional sku As String = "", Optional quantExp As Integer = 0, Optional pallets As Integer = 0) As Double
+'Public Function defVolume(itemsData As Variant, Optional sku As String = "", Optional quantExp As Integer = 0, Optional pallets As Integer = 0) As Double
+'Public Function defShippingInfo(itemsData As Variant, Optional sku As String = "", Optional quantExp As Integer = 0, Optional pallets As Integer = 0, _
+                                Optional unitsPerCarton As Integer = 0, Optional cartons As Integer = 0) As String
+'Public Function defTotalCost() As Double 'itemsData As Variant, Optional sku As String = "", Optional quantExp As Integer = 0
+'Public Function defBestShipDate(Optional windowStart As Date = #1/1/1946#, Optional windowEnd As Date = #1/1/1946#) As Date
+'Public Function defShipToCountry(Optional shipToLoc As String = "") As String
+'Public Function defOrderDate() As Date
+'Public Function defShipmentRefId() As String
+'Public Function defStatus(firstTimeImport As Boolean, _
+                          Optional orderDate As Date = CDate(0), _
+                          Optional windowStart As Date = CDate(0), Optional windowEnd As Date = CDate(0), _
+                          Optional bestShipDate As Date = CDate(0), Optional actualShipDate As Date = CDate(0)) As String
+                          
+'--- GET/LET/SET
+'Private headerRow As Variant
+'Public OG...
+'Public AFTER IMPORT...
+'Public AFTER ADDED TO SHIPMENT...
+
+'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+' NOTES
+' adding a new field means it needs to be added in:
+'    as a field and get/set functions and in the constructor in class Order
+'    updateSingleOrder in class Archive
+'    addOrder in class Archive
+'    potentially as a field and get/set functions and in the constructor in class Shipment
+
+'    sortOrders in Arrays
+'    pasteOrder and pasteOrders in excelInteraction
+'    potentially in getShipmentsFromManifest in excelInteraction
+'    potentially in maint_updateArchive in a_main04_main
+
+'    COLRE_FIELD_NAME = "/xxxx/i" in a_GLOBAL_CONSTANTS
+
+'    as a new column in the archive template csv (maybe even retroactively added to the previous months)
+
+'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+'--- CLASS DEPENDENCIES
+'User Class Col
+    're() in constructor()
+    
+'--- OPTIONS
+Option Explicit
+Option Base 1
+
+
+'----------------------------------------------------
+'--- FIELDS
+'----------------------------------------------------
+
+Private m_headerRow As Variant
+
+'OG
+Private m_po As String
+Private m_shipToLoc As String
+Private m_vendor As String
+Private m_availability As String
+Private m_windowType As String
+Private m_windowStart As Date
+Private m_windowEnd As Date
+Private m_expDate As Date
+Private m_modelNum As String
+Private m_externalId As String
+Private m_title As String
+Private m_asin As String
+Private m_unitCost As Double
+Private m_quantReq As Integer
+Private m_quantExp As Integer
+
+'AFTER IMPORT
+Private m_orderType As String
+Private m_shipFromWarehouse As String
+Private m_sku As String
+Private m_pallets As Integer
+Private m_unitsPerCarton As Integer
+Private m_cartons As Integer
+Private m_weight As Double
+Private m_volume As Double
+Private m_shippingInfo As String
+Private m_totalCost As Double
+Private m_bestShipDate As Date
+Private m_shipToCountry As String
+Private m_orderDate As Date
+Private m_status As String
+
+'AFTER ADDED TO SHIPMENT
+Private m_arnNum As String
+Private m_shipmentRefId As String
+Private m_invId As String
+Private m_carrier As String
+Private m_scac As String
+Private m_actualShipDate As Date
+Private m_asn As String
+Private m_asnSub As String
+Private m_invSub As String
+Private m_notes As String
+
+Private m_scheduledShipDate As Date
+Private m_palletsInShipment As Integer
+Private m_boCause As String
+Private m_boCorrectiveAction As String
+Private m_owner As String
+
+'----------------------------------------------------
+'--- CONSTRUCTOR
+'----------------------------------------------------
+
+Public Sub constructor(ByRef dataRow As Variant, ByRef headerRow As Variant, Optional firstTimeImport As Boolean = False, _
+                       Optional shipFromWarehouse As String = "", Optional orderType As String = "regular", Optional ByRef itemsData As Variant)
+
+    'dataRow and headerRow need to be 1d Arrays pls
+    m_headerRow = headerRow
+    Dim col As col: Set col = New col: Call col.constructor(headerRow) 'col object lets us match data with differently ordered columns
+    Dim c As Integer 'c is the column index
+
+    'OG
+    c = col.re(COLRE_PO):                 If c >= 1 Then m_po = dataRow(c) 'If c >= 1 Then... ie If column exists in headerRow, Then ...
+    c = col.re(COLRE_VENDOR):             If c >= 1 Then m_vendor = dataRow(c)
+    c = col.re(COLRE_SHIPTOLOC):          If c >= 1 Then m_shipToLoc = dataRow(c)
+    c = col.re(COLRE_ASIN):               If c >= 1 Then m_asin = dataRow(c)
+    c = col.re(COLRE_EXTERNAL_ID):        If c >= 1 Then m_externalId = dataRow(c)
+    c = col.re(COLRE_MODEL_NUM):          If c >= 1 Then m_modelNum = dataRow(c)
+    c = col.re(COLRE_TITLE):              If c >= 1 Then m_title = dataRow(c)
+    c = col.re(COLRE_AVAILABILITY):       If c >= 1 Then m_availability = dataRow(c)
+    c = col.re(COLRE_WINDOW_TYPE):        If c >= 1 Then m_windowType = dataRow(c)
+
+    c = col.re(COLRE_WINDOW_START)
+    If c >= 1 Then
+        If dataRow(c) = "" Then
+            m_windowStart = CDate(0)
+        Else
+            m_windowStart = CDate(dataRow(c))
+        End If
+    End If
+
+    c = col.re(COLRE_WINDOW_END)
+    If c >= 1 Then
+        If dataRow(c) = "" Then
+            m_windowEnd = CDate(0)
+        Else
+            m_windowEnd = CDate(dataRow(c))
+        End If
+    End If
+    
+    c = col.re(COLRE_EXPECTED_DATE)
+    If c >= 1 Then
+        If dataRow(c) = "" Then
+            m_expDate = CDate(0)
+        Else
+            m_expDate = CDate(dataRow(c))
+        End If
+    End If
+    
+    c = col.re(COLRE_QUANTITY_REQUESTED): If c >= 1 Then m_quantReq = dataRow(c)
+    c = col.re(COLRE_EXPECTED_QUANT):     If c >= 1 Then m_quantExp = dataRow(c)
+    c = col.re(COLRE_UNIT_COST):          If c >= 1 Then m_unitCost = dataRow(c)
+
+    'AFTER IMPORT
+    If isVariantArrayInit(itemsData) = False Then
+        itemsData = getValues("items", 2, 1, 0, 0)
+    End If
+
+    c = col.re(COLRE_ORDER_TYPE):
+    If firstTimeImport = True Then
+        m_orderType = orderType
+    ElseIf c >= 1 Then
+        If dataRow(c) = "" Then
+            m_orderType = "regular"
+        ElseIf dataRow(c) = "regular" Then
+            m_orderType = "regular"
+        Else
+            m_orderType = dataRow(c)
+        End If
+    Else
+        m_orderType = orderType
+    End If
+
+    c = col.re(COLRE_SHIP_FROM_WAREHOUSE): If c >= 1 Then m_shipFromWarehouse = dataRow(c) Else m_shipFromWarehouse = shipFromWarehouse
+    c = col.re(COLRE_SKU):                 If c >= 1 Then m_sku = dataRow(c) Else m_sku = defSku()
+    c = col.re(COLRE_PALLETS)
+    If c >= 1 Then
+        If dataRow(c) = "" Then
+            m_pallets = 0
+        Else
+            m_pallets = CInt(dataRow(c))
+        End If
+    Else
+        m_pallets = defPallets(itemsData)
+    End If
+
+    c = col.re(COLRE_UNITS_PER_CARTON): If c >= 1 Then m_unitsPerCarton = dataRow(c) Else m_unitsPerCarton = defUnitsPerCarton(itemsData)
+    c = col.re(COLRE_CARTONS):          If c >= 1 Then m_cartons = dataRow(c) Else m_cartons = defCartons()
+    c = col.re(COLRE_TOTAL_WEIGHT):     If c >= 1 Then m_weight = dataRow(c) Else m_weight = defWeight(itemsData)
+    c = col.re(COLRE_TOTAL_VOLUME):     If c >= 1 Then m_volume = dataRow(c) Else m_volume = defVolume(itemsData)
+    c = col.re(COLRE_SHIPPING_INFO):    If c >= 1 Then m_shippingInfo = dataRow(c) Else m_shippingInfo = defShippingInfo(itemsData)
+    c = col.re(COLRE_TOTAL_COST):       If c >= 1 Then m_totalCost = dataRow(c) Else m_totalCost = defTotalCost()
+    c = col.re(COLRE_BEST_SHIP_DATE):   If c >= 1 Then m_bestShipDate = CDate(dataRow(c)) Else m_bestShipDate = CDate(defBestShipDate())
+    c = col.re(COLRE_SHIP_TO_COUNTRY):  If c >= 1 Then m_shipToCountry = dataRow(c) Else m_shipToCountry = defShipToCountry()
+    c = col.re(COLRE_ORDER_DATE):       If c >= 1 Then m_orderDate = CDate(dataRow(c)) Else m_orderDate = CDate(defOrderDate())
+    c = col.re(COLRE_STATUS):           If c >= 1 Then m_status = dataRow(c) Else m_status = defStatus(firstTimeImport)
+    
+    'AFTER ADDED TO SHIPMENT
+    c = col.re(COLRE_ARN):               If c >= 1 Then m_arnNum = dataRow(c) Else m_arnNum = ""
+    c = col.re(COLRE_SHIPMENT_REF_ID):   If c >= 1 Then m_shipmentRefId = dataRow(c) Else m_shipmentRefId = ""
+    c = col.re(COLRE_INVOICE_ID):        If c >= 1 Then m_invId = dataRow(c) Else m_invId = ""
+    c = col.re(COLRE_CARRIER):           If c >= 1 Then m_carrier = dataRow(c) Else m_carrier = ""
+    c = col.re(COLRE_SCAC):              If c >= 1 Then m_scac = dataRow(c) Else m_scac = ""
+
+    c = col.re(COLRE_ACTUAL_SHIP_DATE):
+    If c >= 1 Then
+         If dataRow(c) = "" Then
+             m_actualShipDate = CDate(0)
+         Else
+             m_actualShipDate = CDate(dataRow(c))
+         End If
+    Else
+        m_actualShipDate = CDate(0)
+    End If
+
+    c = col.re(COLRE_ASN_ID):            If c >= 1 Then m_asn = dataRow(c) Else m_asn = ""
+    c = col.re(COLRE_ASN_SUBMITTED):     If c >= 1 Then m_asnSub = dataRow(c) Else m_asnSub = ""
+    c = col.re(COLRE_INVOICE_SUBMITTED): If c >= 1 Then m_invSub = dataRow(c) Else m_invSub = ""
+    c = col.re(COLRE_NOTES):             If c >= 1 Then m_notes = dataRow(c) Else m_notes = ""
+
+    c = col.re(COLRE_SHIPMENT_PALLETS):
+    If firstTimeImport = True Then
+        m_palletsInShipment = m_pallets
+    Else
+        If c >= 1 Then
+            If dataRow(c) = "" Then
+                m_palletsInShipment = 0
+            Else
+                m_palletsInShipment = CInt(dataRow(c))
+            End If
+        Else
+            m_palletsInShipment = m_pallets
+        End If
+    End If
+    
+    c = col.re(COLRE_SCHED_SHIP_DATE):
+    If c >= 1 Then
+         If dataRow(c) = "" Then
+             m_scheduledShipDate = CDate(0)
+         Else
+             m_scheduledShipDate = CDate(dataRow(c))
+         End If
+    Else
+        m_scheduledShipDate = CDate(0)
+    End If
+
+    c = col.re(COLRE_BO_CAUSE):              If c >= 1 Then m_boCause = dataRow(c) Else m_boCause = ""
+    c = col.re(COLRE_BO_CORRECTIVE_ACTION):  If c >= 1 Then m_boCorrectiveAction = dataRow(c) Else m_boCorrectiveAction = ""
+    c = col.re(COLRE_OWNER):                 If c >= 1 Then m_owner = dataRow(c) Else m_owner = ""
+End Sub
+
+
+'----------------------------------------------------
+'--- DEF METHODS
+'----------------------------------------------------
+
+Public Function defSku(Optional sku As String = "") As String
+     If sku = "" Then: sku = m_modelNum
+     
+     If Left(sku, 2) = "V-" Then: sku = Right(sku, Len(sku) - 2)
+     defSku = sku
+End Function
+
+Public Function defPallets(ByRef itemsData As Variant, Optional sku As String = "", Optional quantExp As Integer = 0) As Integer
+    If sku = "" Then: sku = m_sku
+    If quantExp = 0 Then: quantExp = m_quantExp
+    
+    Dim remainingWeight As Double: remainingWeight = 0
+    Dim unitWeight As Double: unitWeight = vLookupRe(sku, itemsData, "/unitWeight/i", 1, 1)
+    Dim totalWeight As Double: totalWeight = unitWeight * quantExp
+    
+    Dim palletUnitLimit As Integer: palletUnitLimit = vLookupRe(sku, itemsData, "/palletUnitLimt/i", 1, 1)
+    Dim pallets As Integer: pallets = 0
+    
+    If palletUnitLimit = 0 Then
+    
+        If totalWeight < PALLET_PAYLOAD_WEIGHT_THRESHOLD Then
+            pallets = 0
+        ElseIf totalWeight >= PALLET_PAYLOAD_WEIGHT_THRESHOLD Then
+            pallets = 1
+        End If
+        
+    ElseIf palletUnitLimit >= 1 Then
+    
+        If quantExp < palletUnitLimit And totalWeight >= PALLET_PAYLOAD_WEIGHT_THRESHOLD Then 'less quant and more/eq weight
+            pallets = 1
+        ElseIf quantExp >= palletUnitLimit Then 'more/eq quant and either less or more or eq weight
+            Dim remainder As Integer: remainder = quantExp Mod palletUnitLimit
+            remainingWeight = remainder * unitWeight
+            Dim quant As Integer: quant = quantExp - remainder
+            pallets = quant / palletUnitLimit
+
+            If remainder > 0 Then
+                pallets = pallets + 1
+            End If
+        End If
+        
+    End If
+
+    defPallets = pallets
+End Function
+
+Public Function defUnitsPerCarton(ByRef itemsData As Variant, Optional sku As String = "") As Integer
+    If sku = "" Then: sku = m_sku
+    Dim unitsPerCarton As Integer: unitsPerCarton = vLookupRe(m_sku, itemsData, "/unitsPerCarton/i", 1, 1)
+    defUnitsPerCarton = unitsPerCarton
+End Function
+
+Public Function defCartons(Optional quantExp As Integer = 0, Optional unitsPerCarton As Integer = 0) As Integer
+    If quantExp = 0 Then: quantExp = m_quantExp
+    If unitsPerCarton = 0 Then: unitsPerCarton = m_unitsPerCarton
+    
+    Dim cartons As Integer: cartons = quantExp / unitsPerCarton
+    defCartons = cartons
+End Function
+
+Public Function defWeight(ByRef itemsData As Variant, Optional sku As String = "", Optional quantExp As Integer = 0, Optional pallets As Integer = 0) As Double
+
+    If sku = "" Then: sku = m_sku
+    If quantExp = 0 Then: quantExp = m_quantExp
+    If pallets = 0 Then: pallets = m_pallets
+
+    Dim unitWeight As Double: unitWeight = vLookupRe(sku, itemsData, "/unitWeight/i", 1, 1)
+    Dim weight As Double: weight = unitWeight * quantExp + (PALLET_WEIGHT * pallets)
+    weight = Math.Round(weight, 2)
+
+    defWeight = weight
+End Function
+
+Public Function defVolume(ByRef itemsData As Variant, Optional sku As String = "", Optional quantExp As Integer = 0, Optional pallets As Integer = 0) As Double
+    If sku = "" Then: sku = m_sku
+    If quantExp = 0 Then: quantExp = m_quantExp
+    If pallets = 0 Then: pallets = m_pallets
+    
+    Dim unitVolume As Double: unitVolume = vLookupRe(sku, itemsData, "/unitVolume/i", 1, 1)
+    
+    Dim volume As Double:
+    If pallets >= 1 Then 'LTL
+        Dim fullPalletVolume As Double: fullPalletVolume = vLookupRe(sku, itemsData, "/fullPalletVolume/i", 1, 1)
+        
+        'Dim palletUnitLimit As Integer: palletUnitLimit = vLookupRe(sku, itemsData, 1, "/palletUnitLimt/i", 1)
+        'Dim remainder As Integer: remainder = quantExp Mod palletUnitLimit
+
+        'Dim remainderVolume As Double: remainderVolume = 0
+        
+        'If remainder * unitWeight < PALLET_PAYLOAD_WEIGHT_THRESHOLD Then 'LTL BUT WITH LOOSE BOXES
+        '    remainderVolume = (unitVolume / 1728) * quantExp
+        'End If
+        
+        volume = (pallets * fullPalletVolume) ' + remainderVolume
+    Else 'SMALL PARCEL
+        volume = (unitVolume / 1728) * quantExp
+    End If
+    
+    volume = Math.Round(volume, 2)
+    
+    defVolume = volume
+End Function
+
+Public Function defShippingInfo(ByRef itemsData As Variant, Optional sku As String = "", Optional quantExp As Integer = 0, Optional pallets As Integer = 0, _
+                                Optional unitsPerCarton As Integer = 0, Optional cartons As Integer = 0) As String
+    If sku = "" Then: sku = m_sku
+    If quantExp = 0 Then: quantExp = m_quantExp
+    If pallets = 0 Then: pallets = m_pallets
+    If unitsPerCarton = 0 Then: unitsPerCarton = m_unitsPerCarton
+    If cartons = 0 Then: cartons = m_cartons
+    
+    Dim itemType As String: itemType = vLookupRe(sku, itemsData, "/type/i", 1, 1)
+    Dim shippingInfo As String: shippingInfo = ""
+
+    If pallets = 1 Then
+         shippingInfo = CStr(pallets) + " pallet of " + itemType
+    ElseIf pallets >= 2 Then
+         shippingInfo = CStr(pallets) + " pallets of " + itemType
+    ElseIf unitsPerCarton >= 2 And quantExp >= 2 Then
+         If quantExp < unitsPerCarton Then
+             shippingInfo = CStr(cartons) + " boxes (" + CStr(quantExp) + " units each)"
+         Else
+             shippingInfo = CStr(cartons) + " boxes (" + CStr(unitsPerCarton) + " units each)"
+         End If
+    End If
+    
+    defShippingInfo = shippingInfo
+End Function
+
+Public Function defTotalCost() As Double 'itemsData As Variant, Optional sku As String = "", Optional quantExp As Integer = 0
+
+    'If sku = "" Then: sku = m_sku
+    'If quantExp = 0 Then: quantExp = m_quantExp
+    
+    'Dim unitCost As Double: unitCost = vLookupRe(sku, itemsData, "/unitCost/i", 1, 1)
+    'Dim totalCost As Double: totalCost = quantExp * unitCost
+    Dim totalCost As Double: totalCost = m_unitCost * m_quantExp
+    defTotalCost = totalCost
+End Function
+
+Public Function defBestShipDate(Optional windowStart As Date = #1/1/1946#, Optional windowEnd As Date = #1/1/1946#) As Date
+    If windowStart = #1/1/1946# Then: windowStart = m_windowStart
+    If windowEnd = #1/1/1946# Then: windowEnd = m_windowEnd
+
+    Dim bestShipDate As Date: bestShipDate = windowEnd
+
+    Dim years As Variant: years = Array(Year(DateAdd("yyyy", -1, windowEnd)), Year(DateAdd("yyyy", 0, windowEnd)), Year(DateAdd("yyyy", 1, windowEnd)))
+    Dim holidays As Variant: holidays = getHolidays(years)
+
+    Dim z As Integer: z = LBound(holidays)
+    Dim str As String: str = ""
+    While z <= UBound(holidays): str = str + CStr(Year(holidays(z))) & "/" & CStr(month(holidays(z))) & "/" & CStr(day(holidays(z))) + vbNewLine: z = z + 1 & " ": Wend
+
+    Dim daysByPreference As Variant: daysByPreference = Array(6, 5, 4, 3, 2) 'fri is best, mon is worst
+    Dim d As Integer: d = LBound(daysByPreference)
+    Dim stopTheLoop As Boolean: stopTheLoop = False
+
+    While stopTheLoop = False And d <= UBound(daysByPreference) 'for each day by preference
+
+        Dim currDate As Date: currDate = windowEnd
+
+        While stopTheLoop = False And currDate <> windowStart 'from end of range to start
+
+            Dim ignore As Boolean: ignore = False
+            
+            Dim h As Integer: h = LBound(holidays)
+            Dim contLoop As Boolean: contLoop = True
+            While h <= UBound(holidays) And contLoop = True
+
+                If holidays(h) = currDate Then
+                    ignore = True
+                    contLoop = False
+                Else
+                    h = h + 1
+                End If
+            Wend
+
+            If ignore = False And daysByPreference(d) = weekday(currDate) Then
+                bestShipDate = currDate
+                stopTheLoop = True
+            Else
+                currDate = DateAdd("d", -1, currDate)
+            End If
+        Wend
+        
+        d = d + 1
+    Wend
+
+    defBestShipDate = bestShipDate
+End Function
+
+Public Function defShipToCountry(Optional shipToLoc As String = "") As String
+    If shipToLoc = "" Then: shipToLoc = m_shipToLoc
+    
+    Dim shipToCountry As String: shipToCountry = "usa"
+    Dim stateRaw As String
+    Dim state As String
+    Dim c As Integer: c = Len(shipToLoc)
+
+    While c > 0 And Mid(shipToLoc, c, 1) <> ","
+        c = c - 1
+    Wend
+    
+    state = Right(shipToLoc, Len(shipToLoc) - c)
+    state = trim(state)
+    
+    If state = "ON" Or _
+       state = "QC" Or _
+       state = "NS" Or _
+       state = "NB" Or _
+       state = "MB" Or _
+       state = "BC" Or _
+       state = "PE" Or _
+       state = "SK" Or _
+       state = "AB" Or _
+       state = "NL" Or _
+       state = "NT" Or _
+       state = "YT" Or _
+       state = "NU" Then
+       
+        shipToCountry = "can"
+    End If
+   
+    defShipToCountry = shipToCountry
+End Function
+
+Public Function defOrderDate() As Date
+    Dim orderDate As Date: orderDate = Date
+    defOrderDate = orderDate
+End Function
+
+Public Function defShipmentRefId() As String
+    Dim shipmentRefId As String: shipmentRefId = "rYYYYMMDD001"
+End Function
+
+Public Function defStatus(firstTimeImport As Boolean, _
+                          Optional orderDate As Date = CDate(0), _
+                          Optional windowStart As Date = CDate(0), Optional windowEnd As Date = CDate(0), _
+                          Optional bestShipDate As Date = CDate(0), Optional actualShipDate As Date = CDate(0)) As String
+    If orderDate = CDate(0) Then orderDate = m_orderDate
+    If windowStart = CDate(0) Then windowStart = m_windowStart
+    If windowEnd = CDate(0) Then windowEnd = m_windowEnd
+    If bestShipDate = CDate(0) Then bestShipDate = m_bestShipDate
+    If actualShipDate = CDate(0) Then actualShipDate = m_actualShipDate
+    
+    Dim status As String: status = "open order"
+
+    If firstTimeImport = True Then
+
+        Dim cancelSkus As Variant: cancelSkus = getMacroParameter("newPos_import", "Auto-Cancel SKUs", True, ",")
+
+        If isVariantArrayInit(cancelSkus) = True Then
+            Dim shouldCancel As Boolean: shouldCancel = False
+            Dim i As Integer: i = LBound(cancelSkus)
+        
+            While i <= UBound(cancelSkus) And _
+                  shouldCancel = False
+              
+                If m_sku = cancelSkus(i) Then
+                    status = "canceled"
+                    shouldCancel = True
+                End If
+            
+                i = i + 1
+            Wend
+        End If
+    End If
+    
+    defStatus = status
+End Function
+
+
+'----------------------------------------------------
+'--- GET/LET/SET
+'----------------------------------------------------
+Public Property Set headerRow(headerRow As Variant): Set m_headerRow = headerRow: End Property
+Public Property Get headerRow() As Variant: headerRow = m_headerRow: End Property
+
+'OG
+Public Property Let po(po As String): m_po = po: End Property
+Public Property Get po() As String: po = m_po: End Property
+
+Public Property Let shipToLoc(shipToLoc As String): m_shipToLoc = shipToLoc: End Property
+Public Property Get shipToLoc() As String: shipToLoc = m_shipToLoc: End Property
+
+Public Property Let vendor(vendor As String): m_vendor = vendor: End Property
+Public Property Get vendor() As String: vendor = m_vendor: End Property
+
+Public Property Let availability(availability As String): m_availability = availability: End Property
+Public Property Get availability() As String: availability = m_availability: End Property
+
+Public Property Let windowType(windowType As String): m_windowType = windowType: End Property
+Public Property Get windowType() As String: windowType = m_windowType: End Property
+
+Public Property Let windowStart(windowStart As Date): m_windowStart = windowStart: End Property
+Public Property Get windowStart() As Date: windowStart = m_windowStart: End Property
+
+Public Property Let windowEnd(windowEnd As Date): m_windowEnd = windowEnd: End Property
+Public Property Get windowEnd() As Date: windowEnd = m_windowEnd: End Property
+
+Public Property Let expDate(expDate As Date): m_expDate = expDate: End Property
+Public Property Get expDate() As Date: expDate = m_expDate: End Property
+
+Public Property Let modelNum(modelNum As String): m_modelNum = modelNum: End Property
+Public Property Get modelNum() As String: modelNum = m_modelNum: End Property
+
+Public Property Let externalId(externalId As String): m_externalId = externalId: End Property
+Public Property Get externalId() As String: externalId = m_externalId: End Property
+
+Public Property Let title(title As String): m_title = title: End Property
+Public Property Get title() As String: title = m_title: End Property
+
+Public Property Let asin(asin As String): m_asin = asin: End Property
+Public Property Get asin() As String: asin = m_asin: End Property
+
+Public Property Let unitCost(unitCost As Double): m_unitCost = unitCost: End Property
+Public Property Get unitCost() As Double: unitCost = m_unitCost: End Property
+
+Public Property Let quantReq(quantReq As Integer): m_quantReq = quantReq: End Property
+Public Property Get quantReq() As Integer: quantReq = m_quantReq: End Property
+
+Public Property Let quantExp(quantExp As Integer): m_quantExp = quantExp: End Property
+Public Property Get quantExp() As Integer: quantExp = m_quantExp: End Property
+
+'AFTER IMPORT
+Public Property Let orderType(orderType As String): m_orderType = orderType: End Property
+Public Property Get orderType() As String: orderType = m_orderType: End Property
+
+Public Property Let shipFromWarehouse(shipFromWarehouse As String): m_shipFromWarehouse = shipFromWarehouse: End Property
+Public Property Get shipFromWarehouse() As String: shipFromWarehouse = m_shipFromWarehouse: End Property
+
+Public Property Let sku(sku As String): m_sku = sku: End Property
+Public Property Get sku() As String: sku = m_sku: End Property
+
+Public Property Let pallets(pallets As Integer): m_pallets = pallets: End Property
+Public Property Get pallets() As Integer: pallets = m_pallets: End Property
+
+Public Property Let cartons(cartons As Integer): m_cartons = cartons: End Property
+Public Property Get cartons() As Integer: cartons = m_cartons: End Property
+
+Public Property Let unitsPerCarton(unitsPerCarton As Integer): m_unitsPerCarton = unitsPerCarton: End Property
+Public Property Get unitsPerCarton() As Integer: unitsPerCarton = m_unitsPerCarton: End Property
+
+Public Property Let weight(weight As Double): m_weight = weight: End Property
+Public Property Get weight() As Double: weight = m_weight: End Property
+
+Public Property Let volume(volume As Double): m_volume = volume: End Property
+Public Property Get volume() As Double: volume = m_volume: End Property
+
+Public Property Let shippingInfo(shippingInfo As String): m_shippingInfo = shippingInfo: End Property
+Public Property Get shippingInfo() As String: shippingInfo = m_shippingInfo: End Property
+
+Public Property Let totalCost(totalCost As Double): m_totalCost = totalCost: End Property
+Public Property Get totalCost() As Double: totalCost = m_totalCost: End Property
+
+Public Property Let bestShipDate(bestShipDate As Date): m_bestShipDate = bestShipDate: End Property
+Public Property Get bestShipDate() As Date: bestShipDate = m_bestShipDate: End Property
+
+Public Property Let shipToCountry(shipToCountry As String): m_shipToCountry = shipToCountry: End Property
+Public Property Get shipToCountry() As String: shipToCountry = m_shipToCountry: End Property
+
+Public Property Let orderDate(orderDate As Date): m_orderDate = orderDate: End Property
+Public Property Get orderDate() As Date: orderDate = m_orderDate: End Property
+
+Public Property Let status(status As String): m_status = status: End Property
+Public Property Get status() As String: status = m_status: End Property
+
+'AFTER ADDED TO SHIPMENT
+Public Property Let arnNum(arnNum As String): m_arnNum = arnNum: End Property
+Public Property Get arnNum() As String: arnNum = m_arnNum: End Property
+
+Public Property Let shipmentRefId(shipmentRefId As String): m_shipmentRefId = shipmentRefId: End Property
+Public Property Get shipmentRefId() As String: shipmentRefId = m_shipmentRefId: End Property
+
+Public Property Let invId(invId As String): m_invId = invId: End Property
+Public Property Get invId() As String: invId = m_invId: End Property
+
+Public Property Let carrier(carrier As String): m_carrier = carrier: End Property
+Public Property Get carrier() As String: carrier = m_carrier: End Property
+
+Public Property Let scac(scac As String): m_scac = scac: End Property
+Public Property Get scac() As String: scac = m_scac: End Property
+
+Public Property Let actualShipDate(actualShipDate As Date): m_actualShipDate = actualShipDate: End Property
+Public Property Get actualShipDate() As Date: actualShipDate = m_actualShipDate: End Property
+
+Public Property Let asn(asn As String): m_asn = asn: End Property
+Public Property Get asn() As String: asn = m_asn: End Property
+
+Public Property Let asnSub(asnSub As String): m_asnSub = asnSub: End Property
+Public Property Get asnSub() As String: asnSub = m_asnSub: End Property
+
+Public Property Let invSub(invSub As String): m_invSub = invSub: End Property
+Public Property Get invSub() As String: invSub = m_invSub: End Property
+
+Public Property Let notes(notes As String): m_notes = notes: End Property
+Public Property Get notes() As String: notes = m_notes: End Property
+
+
+Public Property Let scheduledShipDate(scheduledShipDate As Date): m_scheduledShipDate = scheduledShipDate: End Property
+Public Property Get scheduledShipDate() As Date: scheduledShipDate = m_scheduledShipDate: End Property
+
+Public Property Let palletsInShipment(palletsInShipment As Integer): m_palletsInShipment = palletsInShipment: End Property
+Public Property Get palletsInShipment() As Integer: palletsInShipment = m_palletsInShipment: End Property
+
+Public Property Let boCause(boCause As String): m_boCause = boCause: End Property
+Public Property Get boCause() As String: boCause = m_boCause: End Property
+
+Public Property Let boCorrectiveAction(boCorrectiveAction As String): m_boCorrectiveAction = boCorrectiveAction: End Property
+Public Property Get boCorrectiveAction() As String: boCorrectiveAction = m_boCorrectiveAction: End Property
+
+Public Property Let owner(owner As String): m_owner = owner: End Property
+Public Property Get owner() As String: owner = m_owner: End Property
+
+
+
