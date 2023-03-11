@@ -1,0 +1,385 @@
+'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Module: a_GLOBAL_CONSTANTS
+
+'--- VARIABLES
+'Archive
+'Col Re Patterns
+'Cell Refs
+'Documents
+'Errors
+'Files
+'Paths
+'Browser Automation
+'Shipments
+'Strings
+'Worksheets
+    
+'--- PROCEDURES
+'Function ALPHABET(letterIndex As Long, Optional letterCase As String = "lower") As String
+    'input index  (ex: 1, 28, etc...)
+    'output letter (ex: A, BB, etc...)
+    'output option for upper/lower case
+'Function MONTH_NAME_TO_INDEX(monthName As String) As Integer
+    'input month name or 3 letter abbreviation (mar or march) (case in-sensitive)
+    'output month index (1 - 12)
+    'output 0 if no match
+'Function WEEKDAYS(dayIndex As Integer, Optional abbreviate As Boolean = False, Optional dayCase As String = "") As String
+    'input weekday index (1 - 7)
+    'output weekday name (sunday - saturday)
+    'output option for abbreviate and upper/lower case
+
+'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+'--- OPTIONS
+Option Explicit
+Option Base 1
+
+'----------------------------------------------------
+'--- VARIABLES
+'----------------------------------------------------
+
+'Archive
+Public Const GET_ORDERS_DEFAULT_MONTHS As Integer = 24
+
+'Browser Automation
+Public Const SELENIUM_MACRO_SHEET_TITLE As String = "Selenium Browser Automation Python Code"
+
+'Cell Refs
+Public Const BOL_CELL_REF_SHIP_DATE As String = "SHIP_DATE"
+Public Const BOL_CELL_REF_SHIP_FROM_NAME As String = "SHIP_FROM_CONTACT_NAME"
+Public Const BOL_CELL_REF_SHIPFROMLOC_ADDRESS_1 As String = "SHIP_FROM_LOCATION_1"
+Public Const BOL_CELL_REF_SHIPFROMLOC_ADDRESS_2 As String = "SHIP_FROM_LOCATION_2"
+Public Const BOL_CELL_REF_SHIPFROMLOC_ADDRESS_3 As String = "SHIP_FROM_LOCATION_3"
+Public Const BOL_CELL_REF_SHIP_TO_CONTACT_NAME As String = "SHIP_TO_CONTACT_NAME"
+Public Const BOL_CELL_REF_SHIPTOLOC_ADDRESS_1 As String = "SHIP_TO_LOCATION_1"
+Public Const BOL_CELL_REF_SHIPTOLOC_ADDRESS_2 As String = "SHIP_TO_LOCATION_2"
+Public Const BOL_CELL_REF_SHIPTOLOC_ADDRESS_3 As String = "SHIP_TO_LOCATION_3"
+Public Const BOL_CELL_REF_BOL_NUMBER As String = "BOL_NUMBER"
+Public Const BOL_CELL_REF_CARRIER_NAME As String = "CARRIER_NAME"
+Public Const BOL_CELL_REF_SCAC_NAME As String = "SCAC_NAME"
+Public Const BOL_CELL_REF_ALL_POS As String = "ALL_POS"
+Public Const BOL_CELL_REF_ARN_NUMBER As String = "ARN_NUMBER"
+Public Const BOL_CELL_REF_TOTAL_PALLETS_1 As String = "TOTAL_PALLETS_1"
+Public Const BOL_CELL_REF_TOTAL_CARTONS As String = "TOTAL_CARTONS"
+Public Const BOL_CELL_REF_TOTAL_CARTONS_2 As String = "TOTAL_CARTONS_2"
+Public Const BOL_CELL_REF_TOTAL_QUANTITY_1 As String = "TOTAL_QUANTITY_1"
+Public Const BOL_CELL_REF_TOTAL_WEIGHT_1 As String = "TOTAL_WEIGHT_1"
+Public Const BOL_CELL_REF_TOTAL_PALLETS_2 As String = "TOTAL_PALLETS_2"
+Public Const BOL_CELL_REF_TOTAL_QUANTITY_2 As String = "TOTAL_QUANTITY_2"
+Public Const BOL_CELL_REF_TOTAL_WEIGHT_2 As String = "TOTAL_WEIGHT_2"
+Public Const BOL_CELL_REF_COMMODITY_DESCRIPTION_1 As String = "COMMODITY_DESCRIPTION_1"
+Public Const BOL_CELL_REF_COMMODITY_DESCRIPTION_2 As String = "COMMODITY_DESCRIPTION_2"
+
+Public Const COMMINV_CELL_REF_ARN_NUMBER As String = "ARN_NUMBER"
+Public Const COMMINV_CELL_REF_SHIP_DATE As String = "SHIP_DATE"
+Public Const COMMINV_CELL_REF_INVOICE_NUM As String = "INVOICE_NUM"
+Public Const COMMINV_CELL_REF_ALL_POS As String = "ALL_POS"
+Public Const COMMINV_CELL_REF_SHIP_FROM_CONTACT_NAME As String = "SHIP_FROM_CONTACT_NAME"
+Public Const COMMINV_CELL_REF_SHIPFROMLOC_ADDRESS_1 As String = "SHIP_FROM_LOCATION_1"
+Public Const COMMINV_CELL_REF_SHIPFROMLOC_ADDRESS_2 As String = "SHIP_FROM_LOCATION_2"
+Public Const COMMINV_CELL_REF_SHIPFROMLOC_ADDRESS_3 As String = "SHIP_FROM_LOCATION_3"
+Public Const COMMINV_CELL_REF_SHIP_TO_CONTACT_NAME As String = "SHIP_TO_CONTACT_NAME"
+Public Const COMMINV_CELL_REF_SHIPTOLOC_ADDRESS_1 As String = "SHIP_TO_LOCATION_1"
+Public Const COMMINV_CELL_REF_SHIPTOLOC_ADDRESS_2 As String = "SHIP_TO_LOCATION_2"
+Public Const COMMINV_CELL_REF_SHIPTOLOC_ADDRESS_3 As String = "SHIP_TO_LOCATION_3"
+Public Const COMMINV_CELL_REF_NUM_OF_PACKAGES As String = "NUM_OF_PACKAGES"
+Public Const COMMINV_CELL_REF_TOTAL_WEIGHT As String = "TOTAL_WEIGHT"
+Public Const COMMINV_CELL_REF_INVOICE_LINE_TOTAL As String = "INVOICE_LINE_TOTAL"
+Public Const COMMINV_CELL_REF_INVOICE_SUB_TOTAL As String = "INVOICE_SUB_TOTAL"
+Public Const COMMINV_CELL_REF_TOTAL_INVOICE_AMOUNT As String = "TOTAL_INVOICE_AMOUNT"
+Public Const COMMINV_CELL_REF_UNITS_FIRST_ROW As String = "UNITS_FIRST_ROW"
+Public Const COMMINV_CELL_REF_UM_FIRST_ROW As String = "UM_FIRST_ROW"
+Public Const COMMINV_CELL_REF_DESC_FIRST_ROW As String = "DESC_FIRST_ROW"
+Public Const COMMINV_CELL_REF_SKU_FIRST_ROW As String = "SKU_FIRST_ROW"
+Public Const COMMINV_CELL_REF_ASIN_FIRST_ROW As String = "ASIN_FIRST_ROW"
+Public Const COMMINV_CELL_REF_HARM_CODE_FIRST_ROW As String = "HARM_CODE_FIRST_ROW"
+Public Const COMMINV_CELL_REF_CTO_FIRST_ROW As String = "CTO_FIRST_ROW"
+Public Const COMMINV_CELL_REF_UNIT_VALUE_FIRST_ROW As String = "UNIT_VALUE_FIRST_ROW"
+Public Const COMMINV_CELL_REF_TOTAL_VALUE_FIRST_ROW As String = "TOTAL_VALUE_FIRST_ROW"
+
+'Col Re Patterns
+Public Const COLRE_ACTUAL_SHIP_DATE As String = "/actual ship date/i"
+Public Const COLRE_ARN As String = "/arn number/i"
+Public Const COLRE_ARN_PAGE As String = "/arn Page/i"
+Public Const COLRE_ASIN As String = "/asin/i"
+Public Const COLRE_ASN_ID As String = "/asn id/i" 'PRO NUMBER
+Public Const COLRE_ASN_SUBMITTED As String = "/asn submitted/i"
+Public Const COLRE_AVAILABILITY As String = "/availability/i"
+Public Const COLRE_BEST_SHIP_DATE As String = "/best ship date/i"
+Public Const COLRE_BO_CAUSE As String = "/BackOrder Cause/i"
+Public Const COLRE_BO_CORRECTIVE_ACTION As String = "/BackOrder Corrective Action/i"
+Public Const COLRE_CARRIER As String = "/carrier/i"
+Public Const COLRE_CARTONS As String = "/cartons/i"
+Public Const COLRE_EXPECTED_DATE As String = "/expected date/i"
+Public Const COLRE_EXPECTED_QUANT As String = "/expected quantity/i"
+Public Const COLRE_EXTERNAL_ID As String = "/external id/i"
+Public Const COLRE_INVOICE_ID As String = "/invoice id/i"
+Public Const COLRE_INVOICE_SUBMITTED As String = "/invoice submitted/i"
+Public Const COLRE_MANIFEST_DIV_1 As String = "/maniefst divider 1/i"
+Public Const COLRE_MANIFEST_DIV_2 As String = "/maniefst divider 2/i"
+Public Const COLRE_MANIFEST_DIV_3 As String = "/maniefst divider 3/i"
+Public Const COLRE_MODEL_NUM As String = "/model number/i"
+Public Const COLRE_NOTES As String = "/notes/i"
+Public Const COLRE_ORDER_DATE As String = "/order date/i"
+Public Const COLRE_ORDER_TYPE As String = "/order type/i"
+Public Const COLRE_OWNER As String = "/owner/i"
+Public Const COLRE_PALLETS As String = "/pallets/i"
+Public Const COLRE_PO As String = "/po/i"
+Public Const COLRE_PO_PAGE As String = "/Purchase Order Page/i"
+Public Const COLRE_QUANTITY_REQUESTED As String = "/quantity requested/i"
+Public Const COLRE_ROW_LABELS As String = "/row labels/i"
+Public Const COLRE_SCAC As String = "/scac/i"
+Public Const COLRE_SCHED_SHIP_DATE As String = "/scheduled ship date/i"
+Public Const COLRE_SCHED_SHIP_TIME As String = "/scheduled ship time/i"
+Public Const COLRE_SHIP_FROM_WAREHOUSE As String = "/Ship From Warehouse/i"
+Public Const COLRE_SHIP_TO_COUNTRY As String = "/ship to country/i"
+Public Const COLRE_SHIPMENT_PALLETS As String = "/shipment plts/i"
+Public Const COLRE_SHIPMENT_REF_ID As String = "/shipment reference id/i"
+Public Const COLRE_SHIPPING_INFO As String = "/shipping info/i"
+Public Const COLRE_SHIPTOLOC As String = "/ship to location/i"
+Public Const COLRE_SKU As String = "/sku/i"
+Public Const COLRE_STATUS As String = "/status/i"
+Public Const COLRE_TITLE As String = "/title/i"
+Public Const COLRE_TOTAL_COST As String = "/total cost/i"
+Public Const COLRE_TOTAL_VOLUME As String = "/total volume/i"
+Public Const COLRE_TOTAL_WEIGHT As String = "/total weight/i"
+Public Const COLRE_UNIT_COST As String = "/unit cost/i"
+Public Const COLRE_UNITS_PER_CARTON As String = "/units per carton/i"
+Public Const COLRE_VENDOR As String = "/vendor/i"
+Public Const COLRE_WINDOW_TYPE As String = "/window type/i"
+Public Const COLRE_WINDOW_START As String = "/window start/i"
+Public Const COLRE_WINDOW_END As String = "/window end/i"
+
+'Documents
+Public Const COMMINV_MAX_GOODS As Integer = 25
+Public Const COMMINV_DEFAULT_UM = "EA"
+Public Const COMMINV_DEFAULT_HARM_CODE = "8421.21.00.00"
+Public Const COMMINV_DEFAULT_CTO = "US"
+
+'Error
+Public Const ERROR_QUIT_PROCEDURE As String = "_QUIT_"
+
+'Files
+Public Const NEW_POS_FILE_LEFT As String = "newPOsFile_"
+Public Const EXCLUDE_NEWPO_CSV_FILE_LEFT As String = "IMPORTED_"
+
+Public Const CREATED_SHIPMENT_CSV_LEFT As String = "createdShipments_"
+Public Const CREATED_SHIPMENT_CSV_COL_SHIP_TO_LOCATION As Integer = 1
+Public Const CREATED_SHIPMENT_CSV_COL_PO As Integer = 2
+Public Const CREATED_SHIPMENT_CSV_COL_SKU As Integer = 3
+Public Const CREATED_SHIPMENT_CSV_COL_ARN As Integer = 4
+Public Const CREATED_SHIPMENT_CSV_COL_SCHED_SHIP_DATE As Integer = 5
+Public Const CREATED_SHIPMENT_CSV_ROW_FIRST As Integer = 1
+
+Public Const SUBMITTED_PROS_CSV_LEFT As String = "submittedPROs_"
+Public Const SUB_ASN_CSV_COL_ARN As Integer = 1
+Public Const SUB_ASN_CSV_COL_PRONUM As Integer = 2
+Public Const SUB_ASN_CSV_ROW_FIRST As Integer = 1
+
+Public Const SUBMITTED_INVS_CSV_LEFT As String = "submittedInvs_"
+Public Const SUB_INV_CSV_COL_ARN As Integer = 1
+Public Const SUB_INV_CSV_COL_INVSUB As Integer = 2
+Public Const SUB_INV_CSV_ROW_FIRST As Integer = 1
+
+'Paths
+Public Const ARCHIVE_PATH_OSCAR As String = "C:\Users\oscar\Desktop\Archive\"
+Public Const ARCHIVE_TEMPLATE_CSV_PATH As String = "ARCHIVE_TEMPLATE\ARCHIVE_TEMPLATE.csv"
+Public Const DESKTOP_PATH_OSCAR As String = "C:\Users\oscar\Desktop\"
+Public Const DOCUMENTS_PATH_OSCAR As String = "C:\Users\oscar\Documents\"
+Public Const FIREFOX_PROFILE_PATH_OSCAR As String = "\AppData\Roaming\Mozilla\Firefox\Profiles\piv2myws.default-release"
+Public Const FIREFOX_PROFILE_PATH As String = "\AppData\Roaming\Mozilla\Firefox\Profiles\piv2myws.default-release"
+Public Const FIREFOX_DRIVER_PATH As String = "\Documents\BA stuff\geckodriver\geckodriver.exe"
+
+'Shipments
+Public Const PALLET_PAYLOAD_WEIGHT_THRESHOLD As Double = 150
+Public Const PALLET_WEIGHT As Double = 15
+
+'Strings
+Public Const DBLQT As String = """"
+Public Const ONEQT As String = "'"
+
+'Worksheets
+Public Const WS_NAME_HIDDEN_DIVIDER_FIRST As String = "hiddenFirstDivider"
+Public Const WS_NAME_HIDDEN_DIVIDER_REPORT As String = "hiddenReportDivider"
+Public Const WS_NAME_HIDDEN_DIVIDER_DOC As String = "hiddenDocDivider"
+Public Const WS_NAME_HIDDEN_DIVIDER_MANIFEST As String = "hiddenManifestDivider"
+
+Public Const WS_NAME_CARRIERS As String = "carriers"
+Public Const WS_CARRIERS_COL_SCAC As Integer = 1
+Public Const WS_CARRIERS_COL_FULL_NAME As Integer = 2
+Public Const WS_CARRIERS_COL_DISPLAY_NAME As Integer = 3
+
+Public Const WS_NAME_HOLIDAYS As String = "holidays"
+Public Const WS_NAME_ITEMS As String = "items"
+Public Const WS_NAME_PRINTERS As String = "printers"
+Public Const WS_NAME_ON_HAND_INVENTORY As String = "On Hand Inventory"
+Public Const WS_NAME_EST_INVENTORY As String = "Estimated Inventory"
+
+Public Const WS_WAREHOUSES_AMZ_NAME As String = "amazonWarehouses"
+Public Const WS_WAREHOUSES_AMZ_COL_WH_NAME As Integer = 1
+Public Const WS_WAREHOUSES_AMZ_COL_STREET_ADDRESS As Integer = 2
+Public Const WS_WAREHOUSES_AMZ_COL_CITY As Integer = 3
+Public Const WS_WAREHOUSES_AMZ_COL_ZIP As Integer = 4
+Public Const WS_WAREHOUSES_AMZ_COL_COUNTRY As Integer = 5
+Public Const WS_WAREHOUSES_AMZ_COL_CONTACTNAME As Integer = 6
+Public Const WS_WAREHOUSES_AMZ_ROW_FIRST As Integer = 2
+
+Public Const WS_WAREHOUSES_EW_NAME As String = "ewWarehouses"
+Public Const WS_WAREHOUSES_EW_COL_NAME As Integer = 1
+Public Const WS_WAREHOUSES_EW_COL_STREET_ADDRESS As Integer = 2
+Public Const WS_WAREHOUSES_EW_COL_CITY As Integer = 3
+Public Const WS_WAREHOUSES_EW_COL_ZIP As Integer = 4
+Public Const WS_WAREHOUSES_EW_COL_COUNTRY As Integer = 5
+Public Const WS_WAREHOUSES_EW_COL_CONTACT_NAME As Integer = 6
+Public Const WS_WAREHOUSES_EW_COL_CONTACT_NUM As Integer = 7
+Public Const WS_WAREHOUSES_EW_COL_WAREHOUSE_CODE As Integer = 8
+Public Const WS_WAREHOUSES_EW_COL_STATUS As Integer = 9
+Public Const WS_WAREHOUSES_EW_ROW_FIRST As Integer = 2
+Public Const WAREHOUSES_EW_STATUS_OBSOLETE As String = "OBSOLETE"
+Public Const WAREHOUSES_EW_STATUS_ACTIVE As String = "ACTIVE"
+
+Public Const WS_NAME_LOG As String = "Log"
+
+Public Const WS_NAME_MACROS As String = "Macros"
+
+Public Const WS_NAME_BOL As String = "BOL"
+Public Const WS_NAME_BOL_TEMPLATE As String = "bolTemplate"
+
+
+Public Const WS_NAME_COMMINV As String = "CommInv"
+Public Const WS_NAME_COMMINV_TEMPLATE As String = "commInvTemplate"
+
+Public Const WS_NAME_MANIFEST_TEMPLATE As String = "manifestTemplate"
+'\/ don't change these to ensure compatibility bw different manifest versions \/
+Public Const WS_MANIFEST_HEADER_ROW As Integer = 1 'hidden row
+Public Const WS_MANIFEST_FIRST_ROW As Integer = 7
+Public Const WS_MANIFEST_FRAME_ROW As Integer = 2
+Public Const WS_MANIFEST_HEADERVISIBLE_ROW As Integer = 3
+Public Const WS_MANIFEST_LASTVISIBLE_COL As Integer = 12
+'/\ don't change these to ensure compatibility bw different manifest versions /\
+
+Public Const WS_NAME_RRLOG As String = "Routing Request Log"
+Public Const WS_RRLOG_HEADER_ROW As Integer = 1
+Public Const WS_RRLOG_FIRST_ROW As Integer = 2
+Public Const WS_RRLOG_MAX_ROW As Integer = 500
+Public Const WS_RRLOG_COL_ARN As Integer = 1
+Public Const WS_RRLOG_COL_SCAC As Integer = 2
+
+Public Const WS_NAME_SCHED_SHIP_TIMES As String = "Scheduled Ship Times"
+Public Const WS_SCHED_SHIP_TIMES_HEADER_ROW As Integer = 1
+Public Const WS_SCHED_SHIP_TIMES_FIRST_ROW As Integer = 2
+Public Const WS_SCHED_SHIP_TIMES_MAX_ROW As Integer = 500
+Public Const WS_SCHED_SHIP_TIMES_COL_ARN As Integer = 1
+Public Const WS_SCHED_SHIP_TIMES_COL_START As Integer = 2
+Public Const WS_SCHED_SHIP_TIMES_COL_END As Integer = 3
+Public Const WS_SCHED_SHIP_TIMES_COL_TRUCK_NUM As Integer = 4
+
+Public Const WS_NAME_UPDATEORDERS As String = "Update Orders"
+Public Const WS_NAME_UPDATEORDERS_TEMPLATE As String = "updateOrdersTemplate"
+Public Const WS_UPDATEORDERS_FIRSTROW As Integer = 5
+Public Const WS_UPDATEORDERS_REALHEADERROW As Integer = 2
+Public Const WS_UPDATEORDERS_VISIBLEHEADERROW As Integer = 3
+Public Const WS_UPDATEORDERS_OPTIONSROW As Integer = 4
+
+Public Const WS_NAME_OPEN_ORDERS As String = "OpenOrdersDate"
+Public Const WS_NAME_REPORT_TEMPLATE_OPEN_ORDERS As String = "reportTemplate_openOrdersByDate"
+
+Public Const WS_NAME_OPEN_ORDERS_SKU As String = "OpenOrdersSKU"
+Public Const WS_NAME_REPORT_TEMPLATE_OPEN_ORDERS_SKU As String = "reportTemplate_openOrdersBySku"
+
+Public Const WS_NAME_TODAYS_ORDERS As String = "Today"
+Public Const WS_NAME_REPORT_TEMPLATE_TODAYS_ORDERS As String = "reportTemplate_todaysOrders"
+
+Public Const WS_NAME_TOTALS As String = "Totals"
+Public Const WS_NAME_REPORT_TEMPLATE_TOTALS As String = "reportTemplate_totals"
+
+Public Const WS_NAME_LATE As String = "Late"
+Public Const WS_NAME_REPORT_TEMPLATE_LATE As String = "reportTemplate_late"
+
+Public Const WS_NAME_BACK_ORDERS As String = "BackOrders"
+Public Const WS_NAME_REPORT_TEMPLATE_BACK_ORDERS As String = "reportTemplate_backOrders"
+
+Public Const WS_NAME_CANCELED_POS As String = "Cancels"
+
+Public Const WS_NAME_CUSTOM_REPORT As String = "CUSTOM"
+Public Const WS_NAME_CUSTOM_REPORT_TEMPLATE As String = "customReportTemplate"
+Public Const WS_CUSTOM_REPORT_ROW_HEADER As Integer = 1
+Public Const WS_CUSTOM_REPORT_ROW_FRAME As Integer = 2
+Public Const WS_CUSTOM_REPORT_ROW_VISIBLE_HEADER As Integer = 2
+Public Const WS_CUSTOM_REPORT_ROW_FIRST As Integer = 4
+
+
+'----------------------------------------------------
+'--- PROCEDURES
+'----------------------------------------------------
+Function ALPHABET(letterIndex As Long, Optional letterCase As String = "lower") As String
+    'FROM https://stackoverflow.com/questions/12796973/function-to-convert-column-number-to-letter (robartsd)
+    Dim n As Long
+    Dim c As Byte
+    Dim s As String
+
+    n = letterIndex
+    Do
+        c = ((n - 1) Mod 26)
+        s = Chr(c + 65) & s
+        n = (n - c) / 26
+
+    Loop While n > 0
+    
+    If letterCase = "lower" Then
+        s = LCase(s)
+    ElseIf letterCase = "upper" Then
+        s = UCase(s)
+    End If
+    
+    ALPHABET = s
+End Function
+
+Function MONTH_NAME_TO_INDEX(monthName As String) As Integer
+    Dim monthindex As Integer: monthindex = 0
+    monthName = LCase(monthName)
+
+    If monthName = "jan" Or monthName = "january" Then monthindex = 1
+    If monthName = "feb" Or monthName = "february" Then monthindex = 2
+    If monthName = "mar" Or monthName = "march" Then monthindex = 3
+    If monthName = "apr" Or monthName = "april" Then monthindex = 4
+    If monthName = "may" Then monthindex = 5
+    If monthName = "jun" Or monthName = "june" Then monthindex = 6
+    If monthName = "jul" Or monthName = "july" Then monthindex = 7
+    If monthName = "aug" Or monthName = "august" Then monthindex = 8
+    If monthName = "sep" Or monthName = "september" Then monthindex = 9
+    If monthName = "oct" Or monthName = "october" Then monthindex = 10
+    If monthName = "nov" Or monthName = "november" Then monthindex = 11
+    If monthName = "dec" Or monthName = "december" Then monthindex = 12
+
+    MONTH_NAME_TO_INDEX = monthindex
+End Function
+
+Function WEEKDAYS(dayIndex As Integer, Optional abbreviate As Boolean = False, Optional dayCase As String = "") As String
+    Dim day As String: day = ""
+
+    If dayIndex = vbSunday Then
+        day = "Sunday"
+    ElseIf dayIndex = vbMonday Then
+        day = "Monday"
+    ElseIf dayIndex = vbTuesday Then
+        day = "Tuesday"
+    ElseIf dayIndex = vbWednesday Then
+        day = "Wednesday"
+    ElseIf dayIndex = vbThursday Then
+        day = "Thursday"
+    ElseIf dayIndex = vbFriday Then
+        day = "Friday"
+    ElseIf dayIndex = vbSaturday Then
+        day = "Saturday"
+    End If
+    
+    If abbreviate = True Then day = Left(day, 3)
+    
+    If dayCase = LCase("lower") Then day = LCase(day)
+    If dayCase = LCase("upper") Then day = UCase(day)
+
+    WEEKDAYS = day
+End Function
+
+
