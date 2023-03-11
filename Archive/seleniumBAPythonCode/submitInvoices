@@ -1,0 +1,139 @@
+### LOGIN TO AMAZON VENDOR CENTRAL ###
+loginTo_amazonVendorCentral()
+
+accounts = ['usa', 'can']
+#accounts = ['amzn1.vg.d.AAH2ZZILO3ZSFBAENTAL4YL4MOXA', 'amzn1.vg.d.ADTNYEWRXNYSYDNH4FZ5OGKITPXA']
+accountCountries = ['usa', 'can']
+
+### SUBMIT INVOICES ###
+a = 0
+while a < len(accounts):
+
+  switchAccount_amazonVendorCentral(accounts[a])
+
+  s = 0
+  while s < len(shipToLocation):
+
+    if shipToCountry[s] == accountCountries[a]:
+
+      place = str(a) + "." + str(s) + ": " + shipToLocation[s] + " " + po[s][0]
+      print(place)
+
+      get(driver, "https://vendorcentral.amazon.com/hz/vendor/members/invoice-creation/search-shipments")
+
+      try:
+        i(driver, 'XPATH', "//div[@id='hmd2f-trigger-tab']", action = 'click', secsAfter = 1)
+      except:
+        pass
+
+      try:
+        dropdowns = i(driver, 'XPATH', "//span[@data-action='a-dropdown-button']")
+        dropdowns[1].click()
+      except:
+        i(driver, 'XPATH', "//div[@id='hmd2f-trigger-tab']", action = 'click', secsAfter = 1)
+        dropdowns = i(driver, 'XPATH', "//span[@data-action='a-dropdown-button']")
+        dropdowns[1].click()
+
+      poTextElements = i(driver, 'TEXT', "Purchase Order Number(s)")
+      poTextElements[2].click()
+
+      i(driver, 'XPATH', "//input[@id='po-number']", action = 'clear and send_keys', keysToSend = po[s][0])
+      i(driver, 'XPATH', "//input[@id='shipmentSearchTableForm-submit']", action = 'click')
+ 
+      poRows = i(driver, 'XPATH', "//tr[@class='mt-row']", secsBefore = 1)
+      numOfRows = 1
+      matchFound = False
+
+      if isinstance(poRows, list) == True:
+        numOfRows = len(poRows)
+      else:
+        numOfRows = 1
+
+      if numOfRows >= 1:
+
+        r = 0
+        while r < numOfRows and matchFound == False:
+
+          rowProNum = i(driver, 'XPATH', "//td[@id='r" + str(r + 1) +  "-carrier']", action = "get text")
+          listProNum = proNum[s].split(",")
+
+          l = 0
+          while l < len(listProNum) and matchFound == False:
+
+            pureProNum = listProNum[l]
+            pureProNum = pureProNum.replace(" ", "")
+            pureProNum = pureProNum.replace("-", "")
+
+            if str(pureProNum) == str(rowProNum):
+              matchFound = True
+
+            l = l + 1
+
+          if matchFound == True:
+            i(driver, 'XPATH', "//td[@id='r" + str(r + 1) +  "-asn_checkbox']", action = "click")
+            i(driver, 'XPATH', "//input[@aria-labelledby='create-invoice-submit-announce']", action = "click", secsAfter = 1)
+
+            invRowsElements = i(driver, 'XPATH', "//input[@data-harmonic-renderer='bool-checkbox']")
+            invRows = []
+
+            numOfLineItems = 1
+            if isinstance(invRowsElements, list) == True:
+              numOfLineItems = len(invRowsElements)
+              invRows = invRowsElements
+            else:
+              numOfLineItems = 1
+              invRows.append(invRowsElements)
+
+            alreadyInvoiced = False
+            x = 0
+            while x < numOfLineItems and alreadyInvoiced == False:
+              if invRows[x].get_attribute("value") == 'false':
+                alreadyInvoiced = True
+              x = x + 1
+
+            if alreadyInvoiced == False:
+  
+              today = datetime.datetime.now().strftime("%m/%d/%Y")
+              dateInput = i(driver, 'XPATH', "//input[@placeholder='M/d/yyyy']", action = 'clear and send_keys', keysToSend=today)
+              i(driver, 'XPATH', "//input[@id='invoice-number']", action='clear and send_keys', keysToSend=invoiceId[s])
+
+              if accountCountries[a] == 'can':
+                i(driver, 'XPATH', "//div[@id='tax-rate-bulk-select']/span[@class='a-dropdown-container']", action = 'click')
+                i(driver, 'XPATH', "//a[@id='inv-taxrate-defaulter_1']", action = 'click')
+
+              try:
+                i(driver, 'XPATH', "//div[@id='hmd2f-exit']", action='click', secsBefore = 0.5, attempts = 3)
+                i(driver, 'XPATH', "//input[@id='inv-agree-checkbox']", action='click', secsBefore = 1, attempts = 5)
+              except:           
+                i(driver, 'XPATH', "//input[@id='inv-agree-checkbox']", action='click', secsBefore = 1, attempts = 5)
+
+              try:
+                i(driver, 'XPATH', "//input[@aria-labelledby='inv-submit-announce']", action='click')
+              except:
+                try:
+                  i(driver, 'XPATH', "//div[@id='hmd2f-exit']", action='click', secsBefore = 0.5, attempts = 3)
+                  i(driver, 'XPATH', "//input[@id='inv-agree-checkbox']", action='click', secsBefore = 1, attempts = 5)
+                except:           
+                  i(driver, 'XPATH', "//input[@id='inv-agree-checkbox']", action='click', secsBefore = 1, attempts = 5)
+
+              isLoaded = i(driver, 'TEXT', "Your invoice has been successfully submitted.", action = 'check if loaded', attempts = 3, secsBefore = 1)
+              if isLoaded  == True:
+                subInvsFile.write('"' + str(arn[s]) + '","' + 'yes' + '"' + "\n")
+                print("Submitted and added to file.")
+              else:
+                print("SKIPPED BECAUSE SUBMISSION FAILURE")
+                subInvsFile.write('"' + str(arn[s]) + '","' + 'yes' + '"' + "\n")
+            else:
+              print("SKIPPED BECAUSE ALREADY DONE (rows unchecked)")
+          elif r == (numOfRows - 1) and matchFound == False:
+            print("SKIPPED BECAUSE NO PRO MATCHES FOUND")
+
+          r = r + 1
+
+      else:
+        print("SKIPPED BECAUSE NO PO MATCHES FOUND")
+     
+    s = s + 1
+  a = a + 1
+
+driver.quit()
