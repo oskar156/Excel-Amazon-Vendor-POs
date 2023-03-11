@@ -1,0 +1,552 @@
+'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Module: a_main02_shipments
+
+'--- PROCEDURES
+'2.1A Sub shipments_addManifestForShipDate()
+'2.1B Sub shipments_checkForMissingPos
+'2.2  Sub shipments_formatManifest()
+'2.3A Sub shipments_ba_createShipments()
+'2.3B Sub shipments_importNewArns()
+'2.4  Sub shipments_updateCarrierInfo()
+'2.5  Sub shipments_adjustManifest()
+'2.6  Sub shipments_updateScheduledShipTimes()
+'2.7  Sub shipments_print()
+
+'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+'--- OPTIONS
+Option Explicit
+Option Base 1
+
+
+'----------------------------------------------------
+'--- SUBS
+'----------------------------------------------------
+
+
+''''''''''''''''''''
+' 2.1A shipments_addManifestForShipDate
+''''''''''''''''''''
+Sub shipments_addManifestForShipDate()
+    Dim procTitle As String: procTitle = "shipments_addManifestForShipDate"
+    
+    Dim archive As archive: Set archive = New archive: Call archive.constructor
+    
+    Dim daysToCheckInput As Variant: daysToCheckInput = getMacroParameter(procTitle, "Days to Check", False)
+    Dim daysToCheck As Integer
+    
+    Dim defaultDaysToCheck As Integer: defaultDaysToCheck = 31
+    Dim maxDaysToCheck As Integer:     maxDaysToCheck = 60
+    
+    If IsNumeric(daysToCheckInput) = False Then
+        daysToCheck = defaultDaysToCheck
+    ElseIf CInt(daysToCheckInput) < 1 Or CInt(daysToCheckInput) > maxDaysToCheck Then
+        daysToCheck = defaultDaysToCheck
+    Else
+        daysToCheck = CInt(daysToCheckInput)
+    End If
+
+    Dim shipDateWarehouseCombos As Variant: shipDateWarehouseCombos = archive.manifestToCreate(daysToCheck)
+    Dim shipDateWarehouseCombos_notExisting As Variant
+    
+    'if valid dates, then present to user and ask for 1 choice
+    If isVariantArrayInit(shipDateWarehouseCombos) = False Then
+        Call prompt_alert("No valid manifests to create. Maybe they already exist...", procTitle)
+        End
+    End If
+    
+    Dim d As Integer: d = LBound(shipDateWarehouseCombos)
+    Dim e As Integer: e = LBound(shipDateWarehouseCombos)
+    Dim shipDateList As String: shipDateList = "Enter 0 to Cancel" & endl(1)
+    While d <= UBound(shipDateWarehouseCombos)
+    
+        Dim newSplitCombo As Variant: newSplitCombo = SplitBase1(shipDateWarehouseCombos(d), ",")
+        Dim currShipDate As Date: currShipDate = CDate(newSplitCombo(1))
+        Dim currentWarehouse As String: currentWarehouse = newSplitCombo(2)
+        
+        If wsExists(Format(currShipDate, "YYMMDD") & " " & currentWarehouse) = False Then
+            shipDateList = shipDateList & "Enter " & e & " for: "
+            shipDateList = shipDateList & Format(currShipDate, "yyyy-mm-dd") & " "
+            shipDateList = shipDateList & WEEKDAYS(weekday(currShipDate), True) & " ("
+            shipDateList = shipDateList & currentWarehouse & ")"
+            shipDateList = shipDateList & endl(1)
+        
+            Call variantPush(shipDateWarehouseCombos_notExisting, shipDateWarehouseCombos(d))
+            e = e + 1
+        End If
+        
+        d = d + 1
+    Wend
+
+    Dim msg As String:           msg = "Choose a Ship Date (YYYY-MM-DD) to Create the Manifest for it:" & endl(2) & shipDateList & endl(2)
+    Dim limitToRange As Boolean: limitToRange = True
+    
+    If isVariantArrayInit(shipDateWarehouseCombos_notExisting) = True Then
+        Dim lRange As Integer:         lRange = LBound(shipDateWarehouseCombos_notExisting)
+        Dim uRange As Integer:         uRange = UBound(shipDateWarehouseCombos_notExisting)
+        Dim manifestChoice As Integer: manifestChoice = prompt_input_int(msg, "Manifest Creation", limitToRange, lRange, uRange)
+
+        'insert manifest and 'get all orders for chosen shipdate
+        Dim finalSplitCombo As Variant: finalSplitCombo = SplitBase1(shipDateWarehouseCombos_notExisting(manifestChoice), ",")
+        Dim finalShipDate As Date:      finalShipDate = CDate(finalSplitCombo(1))
+        Dim finalWarehouse As String:   finalWarehouse = finalSplitCombo(2)
+
+        Dim addManifest As Boolean: addManifest = True
+        Dim manifest As manifest:   Set manifest = New manifest: Call manifest.constructorDt(finalShipDate, finalWarehouse, addManifest)
+        Call manifest.addOrders
+    Else
+        Call prompt_alert("No manifests are available to be made." & endl(2) & "Either there are no Ship Dates found in the next " & daysToCheckInput & "days." & endl(1) & "Or, all Ship Dates already have manifests.", "Manifest creation canceled.")
+    End If
+End Sub
+''''''''''''''''''''
+' 2.1B shipments_checkForMissingPos
+''''''''''''''''''''
+Sub shipments_checkForMissingPos()
+    Dim procTitle As String: procTitle = "shipments_checkForMissingPos"
+    
+    Dim manifestName As String:      manifestName = ActiveSheet.name
+    Dim shipDatePortion As String:   shipDatePortion = Left(manifestName, 6)
+    Dim shipFromWarehouse As String: shipFromWarehouse = Right(manifestName, Len(manifestName) - 7)
+    Dim shipDate As Date:            shipDate = DateSerial(CInt(Left(shipDatePortion, 2)), CInt(Right(Left(shipDatePortion, 4), 2)), CInt(Right(shipDatePortion, 2)))
+    
+    Dim manifestData As Variant: manifestData = getValues(manifestName, 1, 1, 0, 0)
+    Dim headerRow As Variant:    headerRow = isoRow_from_2dArr(manifestData, WS_MANIFEST_HEADER_ROW, False)
+    Dim col As col: Set col = New col: Call col.constructor(headerRow)
+
+    Dim ordersToPaste As Variant
+            
+    Dim archive As archive: Set archive = New archive: Call archive.constructor
+    
+    Dim c As Variant:                               Dim v As Variant:                       Dim q As Variant:
+    Call variantPush(c, COLRE_BEST_SHIP_DATE):      Call variantPush(v, shipDate):          Call variantPush(q, "=")
+    Call variantPush(c, COLRE_SHIP_FROM_WAREHOUSE): Call variantPush(v, shipFromWarehouse): Call variantPush(q, "=")
+    Call variantPush(c, COLRE_STATUS):              Call variantPush(v, "canceled"):        Call variantPush(q, "<>")
+    
+    Dim ordersFromArchive As Variant: ordersFromArchive = archive.getOrders(c, v, q) 'ordersFromArchive look for archive orders that match shipdate and shipfromwarehouse
+    
+    Dim pos As Variant 'ordersFromManifest get all po sku combos on manifest
+    Dim skus As Variant
+    
+    Dim i As Integer: i = WS_MANIFEST_FIRST_ROW
+    While i <= UBound(manifestData)
+    
+        Dim currPo As String:  currPo = manifestData(i, col.re(COLRE_PO))
+        Dim currSku As String: currSku = manifestData(i, col.re(COLRE_SKU))
+
+        If currPo <> "" And currSku <> "" Then
+            Call variantPush(pos, currPo)
+            Call variantPush(skus, currSku)
+        End If
+        
+        i = i + 1
+    Wend
+    
+    Dim a As Integer: a = LBound(ordersFromArchive)
+    While a <= UBound(ordersFromArchive) 'loop through ordersFromArchive and ordersFromManifest and find the pos missing from ordersFromManifest
+    
+        Dim orderOnManifest As Boolean: orderOnManifest = False
+        
+        Dim m As Integer: m = LBound(pos)
+        While m <= UBound(pos) And _
+              orderOnManifest = False
+    
+            If ordersFromArchive(a).po = pos(m) And _
+               ordersFromArchive(a).sku = skus(m) Then
+               
+                orderOnManifest = True
+            End If
+               
+            
+            m = m + 1
+        Wend
+    
+        If orderOnManifest = False Then
+            Call variantPush(ordersToPaste, ordersFromArchive(a))
+        End If
+    
+        a = a + 1
+    Wend
+
+    If isVariantArrayInit(ordersToPaste) = False Then
+        Call prompt_alert("No Missing Orders." & endl() & "Operation canceled.", procTitle)
+        End
+    Else
+        Call pasteOrders(manifestName, ordersToPaste, UBound(manifestData, 1) + 1, WS_MANIFEST_HEADER_ROW)
+        Call prompt_alert("Missing Orders Added." & endl(2) & "PLEASE FORMAT MANUALLY!", procTitle)
+        End
+    End If
+End Sub
+
+
+''''''''''''''''''''
+' 2.2 shipments_formatManifest
+''''''''''''''''''''
+Sub shipments_formatManifest()
+    Dim procTitle As String: procTitle = "shipments_formatManifest"
+    
+    Dim ws As Worksheet: Set ws = ActiveSheet
+    Dim wsName As String: wsName = ws.name
+    Dim addManifest As Boolean: addManifest = False
+    
+    Dim split As Variant: split = SplitBase1(wsName, " ")
+    Dim dt As String: dt = split(1)
+    Dim wh As String: wh = split(2)
+    
+    Dim manifest As manifest: Set manifest = New manifest: Call manifest.constructorStr(dt, wh, addManifest)
+    Call manifest.format_AssignIds_updateArchive
+    
+    Dim button As Object
+    Set button = ActiveSheet.Buttons(Application.Caller)
+    button.Delete
+End Sub
+
+
+''''''''''''''''''''
+' 2.3A shipments_ba_createShipments
+''''''''''''''''''''
+Sub shipments_ba_createShipments()
+    Dim procTitle As String: procTitle = "shipments_ba_createShipments"
+    
+    Dim activeSheetName As String:        activeSheetName = ActiveWorkbook.ActiveSheet.name
+    Dim sel As seleniumBrowserAutomation: Set sel = New seleniumBrowserAutomation: Call sel.constructor
+    Dim code As String:                   code = sel.createShipments(activeSheetName)
+    Dim path As String:                   path = sel.desktopPath & "createShipments.py"
+    Call writeToTextFile(path, code, True, True)
+
+    prompt_alert ("Run the newly created file to Create the Shipments in Vendor Central." & endl(2) & "Located at: " & path)
+End Sub
+''''''''''''''''''''
+' 2.3B shipments_importNewArns
+''''''''''''''''''''
+Sub shipments_importNewArns()
+    Dim procTitle As String: procTitle = "shipments_importNewArns"
+
+    Dim i, r As Integer 'reserved for loops
+    Dim ws As Worksheet:  Set ws = ActiveWorkbook.ActiveSheet
+    Dim wsName As String: wsName = ws.name
+    
+    'get list of valid csv files
+    Dim downloadsPath As String:    downloadsPath = "C:\Users\" & Environ("username") & "\Desktop"
+    Dim extensionsToList As String: extensionsToList = "csv"
+    
+    Dim fileNames As Variant:       fileNames = listOfFileNamesInPath(downloadsPath, extensionsToList, "", CREATED_SHIPMENT_CSV_LEFT)
+    Call endIfNotInit(fileNames, "No valid CSV files found on the Desktop." & endl(1) & "Import Canceled.", procTitle) 'quit if no files found
+    Call swap(fileNames)
+    
+    'prompt user for fileChoices
+    Dim fileList As String: fileList = ""
+    For i = LBound(fileNames) To UBound(fileNames)
+        fileList = fileList & "Enter " & i & " to choose: " & fileNames(i) & endl(1)
+    Next i
+    
+    Dim title As String:         title = "Choose file(s) (single or comma-seperated list)"
+    Dim delimeter As String:     delimeter = ","
+    Dim limitToRange As Boolean: limitToRange = True
+    
+    Dim fileChoices As Variant:  fileChoices = prompt_inputSplitList_int(fileList, title, delimeter, limitToRange, LBound(fileNames), UBound(fileNames))
+    
+    'loop through each fileChoices and add to manifest and archive
+    Dim archive As archive: Set archive = New archive: Call archive.constructor
+    
+    Dim manifestData As Variant:       manifestData = getValues(wsName, 1, 1, 0, 0)
+    Dim manifestHeaderRow As Variant:  manifestHeaderRow = isoRow_from_2dArr(manifestData, WS_MANIFEST_HEADER_ROW, False)
+    Dim col As col: Set col = New col: Call col.constructor(manifestHeaderRow)
+    
+    Dim totalOrders As Integer: totalOrders = 0
+    Dim totalFiles As Integer:  totalFiles = 0
+    Dim filesParsed As String:  filesParsed = ""
+    Dim arnsAdded As String:    arnsAdded = ""
+    
+    For i = LBound(fileChoices) To UBound(fileChoices) 'parse each file in fileChoices
+    
+        Dim fileName As String: fileName = fileNames(fileChoices(i))
+        Dim filepath As String: filepath = "C:\Users\" & Environ("username") & "\Desktop\" & fileName
+
+        Dim newData As Variant:      newData = parse2dArrFromCsv(filepath, """,""")
+
+        Dim n As Integer: n = CREATED_SHIPMENT_CSV_ROW_FIRST
+
+        While n <= UBound(newData, 1)
+        
+            Dim newArn As String: newArn = newData(n, CREATED_SHIPMENT_CSV_COL_ARN)
+            Dim schedShipDate As String: schedShipDate = newData(n, CREATED_SHIPMENT_CSV_COL_SCHED_SHIP_DATE)
+            
+            Dim matchFound As Boolean: matchFound = False
+            r = WS_MANIFEST_FIRST_ROW
+            While r <= UBound(manifestData, 1) And matchFound = False 'loop through manifest
+ 
+                If manifestData(r, col.re(COLRE_SHIPTOLOC)) <> "" And _
+                   manifestData(r, col.re(COLRE_SHIPTOLOC)) = newData(n, CREATED_SHIPMENT_CSV_COL_SHIP_TO_LOCATION) And _
+                   manifestData(r, col.re(COLRE_PO)) = newData(n, CREATED_SHIPMENT_CSV_COL_PO) And _
+                   manifestData(r, col.re(COLRE_SKU)) = newData(n, CREATED_SHIPMENT_CSV_COL_SKU) Then 'find matches and paste
+                
+                    ws.Cells(r, col.re(COLRE_ARN)) = newArn 'update manifest
+                    ws.Cells(r, col.re(COLRE_SCHED_SHIP_DATE)) = schedShipDate 'update manifest
+                    Dim s As Integer: s = r 'update archive
+                    
+                    Dim endShipmentLoop As Boolean: endShipmentLoop = False
+                    
+                    While endShipmentLoop = False And _
+                          manifestData(s, col.re(COLRE_SKU)) <> "" And _
+                          (manifestData(s, col.re(COLRE_SHIPTOLOC)) = "" Or _
+                           manifestData(s, col.re(COLRE_SHIPTOLOC)) = manifestData(r, col.re(COLRE_SHIPTOLOC)))
+
+                        Dim currPo As String:      currPo = manifestData(s, col.re(COLRE_PO))
+                        Dim currSku As String:     currSku = manifestData(s, col.re(COLRE_SKU))
+                        Dim currOrderDate As Date: currOrderDate = CDate(manifestData(s, col.re(COLRE_ORDER_DATE)))
+
+                        Call archive.updateSingleOrder(currPo, currSku, currOrderDate, COLRE_ARN, newArn)
+                        Call archive.updateSingleOrder(currPo, currSku, currOrderDate, COLRE_SCHED_SHIP_DATE, schedShipDate)
+                        
+                        totalOrders = totalOrders + 1
+                        arnsAdded = arnsAdded & newArn & " - " & currPo & " - " & currSku & endl(1)
+                        
+                        s = s + 1
+                        If (s + 1) > UBound(manifestData, 1) Then
+                            s = s - 1
+                            endShipmentLoop = True
+                        End If
+                    Wend
+
+                End If
+                
+                r = r + 1
+            Wend
+
+            n = n + 1
+        Wend
+
+       totalFiles = totalFiles + 1
+       filesParsed = filesParsed & fileName & endl(1)
+    Next i
+
+    Dim finalMsg As String: finalMsg = "" 'exit msg for user
+    finalMsg = finalMsg & totalFiles & " files parsed:" & endl(1)
+    finalMsg = finalMsg & filesParsed & endl(1)
+    finalMsg = finalMsg & totalOrders & " total orders updated in Manifest and Archive:" & endl(1)
+    finalMsg = finalMsg & arnsAdded & endl(1)
+    Call prompt_alert(finalMsg, "ARN Import Completed")
+End Sub
+
+
+''''''''''''''''''''
+' 2.4 shipments_updateCarrierInfo
+''''''''''''''''''''
+Sub shipments_updateCarrierInfo()
+    Dim procTitle As String: procTitle = "shipments_updateCarrierInfo"
+
+    Dim ws As Worksheet: Set ws = ActiveSheet 'manifest
+    Dim wsName As String: wsName = ws.name
+    
+    If wsName = WS_NAME_MANIFEST_TEMPLATE Then
+        End
+    End If
+    
+    Dim wsRR As Worksheet: Set wsRR = ActiveWorkbook.Sheets(WS_NAME_RRLOG)
+
+    'get emails in rr from outlook
+    Dim bigFolderName As String: bigFolderName = getMacroParameter(procTitle, "Outlook Big Folder", False)
+    Dim folderName As String:    folderName = getMacroParameter(procTitle, "Outlook RR Folder", False)
+    Dim oldFolderName As String: oldFolderName = getMacroParameter(procTitle, "Outlook RR Old Folder", False)
+    
+    Dim bodies As Variant: bodies = getEmailFieldsByFolder(bigFolderName, folderName, "body", oldFolderName)
+
+    'paste in rr
+    If isVariantArrayInit(bodies) = True Then
+        Dim i As Integer: i = LBound(bodies)
+        While i <= UBound(bodies)
+
+            Dim arnMultiple As Variant: arnMultiple = regexMatchMultiple("/ARN[A-z\): ]+[0-9]+/ig", bodies(i))
+
+            Dim scac As String: scac = ""
+            scac = regexMatch("/: [A-Za-z]+/", regexMatch("/SCAC: [A-Za-z]+/i", bodies(i)))
+
+            If scac <> "" Then
+                scac = Right(scac, Len(scac) - 2)
+            End If
+
+            If VarType(arnMultiple) <> vbError And scac <> "" Then
+                Dim a As String: a = LBound(arnMultiple)
+                While a <= UBound(arnMultiple)
+
+                    Dim arn As String: arn = regexMatch("/[0-9]+/", arnMultiple(a))
+                    wsRR.Range("A" & WS_RRLOG_FIRST_ROW).EntireRow.Insert
+                    Call setValue(WS_NAME_RRLOG, arn, WS_RRLOG_FIRST_ROW, WS_RRLOG_COL_ARN)
+                    Call setValue(WS_NAME_RRLOG, scac, WS_RRLOG_FIRST_ROW, WS_RRLOG_COL_SCAC)
+                    a = a + 1
+                Wend
+            End If
+        
+            i = i + 1
+        Wend
+    Else
+        Call prompt_alert("No new Routing Request emails found." & endl(1) & "Select OK to try and match previously imported SCAC/Carriers to ARNs...", procTitle)
+    End If
+    
+    'match to arns in manifest and paste
+    Dim split As Variant: split = SplitBase1(wsName, " ")
+    Dim dt As String: dt = split(1)
+    Dim wh As String: wh = split(2)
+    
+    Dim addManifest As Boolean: addManifest = False
+    Dim manifest As manifest: Set manifest = New manifest: Call manifest.constructorStr(dt, wh, addManifest)
+    Call manifest.getRRinfo_assignCarrierInfo_updateArchive 'add arn page
+End Sub
+
+
+''''''''''''''''''''
+' 2.5 shipments_adjustManifest
+''''''''''''''''''''
+Sub shipments_adjustManifest()
+    Dim procTitle As String: procTitle = "shipments_adjustManifest"
+    
+    Dim ws As Worksheet: Set ws = ActiveSheet
+    Dim wsName As String: wsName = ws.name
+    
+    Dim split As Variant: split = SplitBase1(wsName, " ")
+    Dim dt As String: dt = split(1)
+    Dim wh As String: wh = split(2)
+    Dim addManifest As Boolean: addManifest = False
+    Dim manifest As manifest: Set manifest = New manifest: Call manifest.constructorStr(dt, wh, addManifest)
+    
+    Call manifest.adjust
+    
+    Dim buttonAdjust As Object
+    Set buttonAdjust = ActiveSheet.Buttons(Application.Caller)
+    buttonAdjust.Delete
+End Sub
+
+
+''''''''''''''''''''
+' 2.6 Sub shipments_updateScheduledShipTimes()
+''''''''''''''''''''
+Sub shipments_updateScheduledShipTimes()
+    Dim procTitle As String: procTitle = "shipments_updateScheduledShipTimes"
+
+    Dim ws As Worksheet: Set ws = ActiveSheet 'manifest
+    Dim wsName As String: wsName = ws.name
+
+    Dim wsSST As Worksheet: Set wsSST = ActiveWorkbook.Sheets(WS_NAME_SCHED_SHIP_TIMES)
+    
+    'get emails in rr from outlook
+    Dim bigFolderName As String: bigFolderName = getMacroParameter(procTitle, "Outlook Big Folder", False)
+    Dim folderName As String:    folderName = getMacroParameter(procTitle, "Outlook Folder", False)
+    Dim oldFolderName As String: oldFolderName = getMacroParameter(procTitle, "Outlook Old Folder", False)
+
+    Dim bodies As Variant: bodies = getEmailFieldsByFolder(bigFolderName, folderName, "body", oldFolderName)
+
+    'paste in rr
+    If isVariantArrayInit(bodies) = True Then
+    
+        
+        Dim i As Integer: i = LBound(bodies)
+        While i <= UBound(bodies)
+        
+            Dim body As String: body = bodies(i)
+            Dim lines As Variant: lines = SplitBase1(body, vbNewLine)
+            Dim line As Variant
+
+            Dim currTruckNumber As Integer
+
+            
+            For Each line In lines
+                
+                Dim arns As Variant
+                Dim startTimes As Variant
+                Dim endTimes As Variant
+                Dim trucks As Variant
+        
+                If regexIsMatch("/Truck Pick-up ETA/i", line) = True Then
+                    
+                    currTruckNumber = CInt(regexMatch("/[0-9]+/", line))
+                    
+                ElseIf regexIsMatch("/[0-9]+:[0-9]+[A-Za-z ]+-[A-Za-z ]+[0-9]+:[0-9]+[A-Za-z ]+/i", line) = True Then
+                
+                    Dim times As Variant: times = SplitBase1(line, "-", True)
+
+                    Dim startPM As Boolean: startPM = regexIsMatch("/PM/i", times(1))
+                    Dim endPM As Boolean:   endPM = regexIsMatch("/PM/i", times(2))
+
+                    Dim currStartTime As Time: Set currStartTime = New Time
+                    Dim currEndTime As Time:   Set currEndTime = New Time
+                    
+                    Call currStartTime.constructorStr(CStr(times(1)), ":", startPM)
+                    Call currEndTime.constructorStr(CStr(times(2)), ":", endPM)
+                    
+                ElseIf regexIsMatch("/ARN [0-9]+/i", line) = True Then
+                
+                    Dim arnRaw As String:     arnRaw = regexMatch("/ARN [0-9]+/i", line)
+                    Dim arnNew As String:     arnNew = Right(arnRaw, Len(arnRaw) - Len("ARN "))
+                    
+                    Call variantPush(arns, arnNew)
+                    Call variantPush(startTimes, currStartTime)
+                    Call variantPush(endTimes, currEndTime)
+                    Call variantPush(trucks, currTruckNumber)
+                End If
+            Next
+
+            Dim a As Integer: a = LBound(arns)
+            While a <= UBound(arns)
+            
+                wsSST.Range(WS_SCHED_SHIP_TIMES_FIRST_ROW & ":" & WS_SCHED_SHIP_TIMES_FIRST_ROW).EntireRow.Insert
+                
+                Call setValue(WS_NAME_SCHED_SHIP_TIMES, arns(a), WS_SCHED_SHIP_TIMES_FIRST_ROW, WS_SCHED_SHIP_TIMES_COL_ARN)
+                Call setValue(WS_NAME_SCHED_SHIP_TIMES, startTimes(a).convertToStr(), WS_SCHED_SHIP_TIMES_FIRST_ROW, WS_SCHED_SHIP_TIMES_COL_START)
+                Call setValue(WS_NAME_SCHED_SHIP_TIMES, endTimes(a).convertToStr(), WS_SCHED_SHIP_TIMES_FIRST_ROW, WS_SCHED_SHIP_TIMES_COL_END)
+                Call setValue(WS_NAME_SCHED_SHIP_TIMES, trucks(a), WS_SCHED_SHIP_TIMES_FIRST_ROW, WS_SCHED_SHIP_TIMES_COL_TRUCK_NUM)
+                
+                a = a + 1
+            Wend
+            
+            Erase arns
+            Erase startTimes
+            Erase endTimes
+            Erase trucks
+            
+            i = i + 1
+        Wend
+    Else
+        Call prompt_alert("No Scheduled Ship Times emails found.", procTitle)
+    End If
+
+    If wsName = WS_NAME_MANIFEST_TEMPLATE Then
+        End
+    End If
+    
+    'Update Manifest
+    Dim addManifest As Boolean: addManifest = False
+    Dim manifestSplit As Variant: manifestSplit = SplitBase1(wsName, " ")
+    Dim dt As String: dt = manifestSplit(1)
+    Dim wh As String: wh = manifestSplit(2)
+    
+    Dim manifest As manifest: Set manifest = New manifest: Call manifest.constructorStr(dt, wh, addManifest)
+    Call manifest.schedShipTimes
+End Sub
+
+
+''''''''''''''''''''
+' 2.7 Sub shipments_print()
+''''''''''''''''''''
+Sub shipments_print()
+    Dim procTitle As String: procTitle = "shipments_print"
+
+    Dim activePrinterName As String: activePrinterName = getMacroParameter(procTitle, "Printer Name", False)
+    
+    Dim ws As Worksheet: Set ws = ActiveSheet
+    Dim wsName As String: wsName = ws.name
+    
+    Dim data As Variant: data = getValues(wsName, 1, 1, 0, 1)
+    Dim rows As Integer: rows = UBound(data, 1)
+    
+    Dim copies As Integer: copies = 1
+    Dim collate As Boolean: collate = False
+    Dim preview As Boolean: preview = True
+
+    Range(Cells(1, 1), Cells(rows, WS_MANIFEST_LASTVISIBLE_COL)).Select
+    Call printOutSetUp(wsName, activePrinterName, "portrait", 1, 1, 0, WS_MANIFEST_LASTVISIBLE_COL, 1, collate, preview)
+    
+    Application.CommandBars.ExecuteMso ("PrintPreviewAndPrint")
+End Sub
+
+
+
