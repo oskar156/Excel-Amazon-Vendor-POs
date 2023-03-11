@@ -1,0 +1,35 @@
+### LOGIN TO AMAZON FREIGHT ###
+loginTo_amazonFreight()
+
+### DL Freight Labels ###
+re = re.compile('input-[0-9]+') #regex pattern to find input fields
+
+for idx, arnIdx in enumerate(arn):
+
+  print(idx) #keeps track in the console
+  
+  get(driver, "https://freight.amazon.com/labels?#/", secsAfter = 1) #go to amazon freight site
+  
+  htmlRaw = driver.page_source    #get the page's html
+  html = str(htmlRaw)             #necessary?
+  regexMatches = re.findall(html) #regex search for input fields
+
+  arnID = regexMatches[0]                                                                     #1st match is ARN
+  i(driver, "ID", arnID, action = 'clear and send_keys', keysToSend = arn[idx], attempts = 5) #clear and enter the ARN
+ 
+  poID = regexMatches[2]                                                                       #3rd match is PO
+  i(driver, "ID", poID, action = 'clear and send_keys', keysToSend = po[idx][0], attempts = 5) #clear and enter the PO
+
+  i(driver, "CLASS_NAME", "css-i35qfd", action = 'click', keysToSend = po[idx][0], attempts = 5, secsBefore = 0.5)                #submit arn and po
+  i(driver, "CLASS_NAME", "css-c6ayu0", action = 'click', keysToSend = po[idx][0], attempts = 5, secsBefore = 0.5, secsAfter = 1) #download freight labels
+
+  try:
+    newFileName = r'C:\Users\oscar\Downloads\Amazon Freight Labels - ' + str(idx) + ' - ' + str(arn[idx]) + '.pdf'
+    list_of_files = glob.glob(r'C:\Users\oscar\Downloads\*.pdf') #get all files in Downloads folder that are pdfs
+    latest_file = max(list_of_files, key = os.path.getctime)     #get newest file in path
+    os.rename(latest_file, newFileName)                          #rename DL'd file (so it prints in order)
+  except:
+    print(str(idx) + ": unable to rename")
+
+driver.quit()
+ 
