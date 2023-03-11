@@ -1,0 +1,140 @@
+'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Class: Time
+
+'--- FIELDS
+
+'--- CONSTRUCTORS
+'Public Sub constructor(hour As Integer, minute As Integer, second As Integer, pm As Boolean)
+'Public Sub constructorStr(str As String, Optional delim As String = ":", Optional pm As Boolean = False)
+
+'--- METHODS
+'Public Function convertToStr() As String
+
+'--- GET/LET/SET
+
+'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+'--- OPTIONS
+Option Explicit
+Option Base 1
+
+
+'----------------------------------------------------
+'--- FIELDS
+'----------------------------------------------------
+Private m_hour As Integer
+Private m_minute As Integer
+Private m_second As Integer
+Private m_pm As Boolean
+
+
+'----------------------------------------------------
+'--- CONSTRUCTOR
+'----------------------------------------------------
+
+Public Sub constructor(hour As Integer, minute As Integer, second As Integer, pm As Boolean)
+    m_hour = hour
+    m_minute = minute
+    m_second = second
+    m_pm = pm
+End Sub
+
+Public Sub constructorStr(str As String, Optional delim As String = ":", Optional pm As Boolean = False)
+
+    Dim hr, min, sec As String
+    
+    Dim delimsEncountered  As Integer: delimsEncountered = 0
+    Dim fragment As String: fragment = ""
+    Dim char As String
+    Dim c As Integer: c = 1
+
+    While c <= Len(str)
+    
+        char = Mid(str, c, 1)
+
+        If IsNumeric(char) = True Then
+            fragment = fragment & char
+        End If
+
+        If char = delim Or char = " " Or c = Len(str) Then
+            
+            If delimsEncountered = 0 Then
+                hr = fragment
+            ElseIf delimsEncountered = 1 Then
+                min = fragment
+            ElseIf delimsEncountered = 2 Then
+                sec = fragment
+            End If
+            
+            delimsEncountered = delimsEncountered + 1
+            fragment = ""
+        End If
+        
+        c = c + 1
+    Wend
+
+    If hr = "" Then hr = "0"
+    If min = "" Then min = "0"
+    If sec = "" Then sec = "0"
+    
+    m_hour = CInt(hr)
+    m_minute = CInt(min)
+    m_second = CInt(sec)
+    m_pm = pm
+End Sub
+
+
+'----------------------------------------------------
+'--- METHODS
+'----------------------------------------------------
+
+Public Function convertToStr() As String
+    Dim str As String: str = ""
+    
+    Dim hourOG As Integer:    hourOG = m_hour
+    Dim hourFinal As Integer: hourFinal = m_hour
+
+    If hourOG >= 13 Then
+        hourFinal = hourOG - 12
+    Else
+        hourFinal = hourOG
+    End If
+    
+    str = str & hourFinal
+    
+    If m_minute <> 0 Then
+        str = str & ":"
+    
+        If m_minute <= 9 Then
+            str = str & "0" & m_minute
+        Else
+            str = str & m_minute
+        End If
+    End If
+
+    If hourOG >= 13 Then
+        str = str & " PM"
+    ElseIf m_pm = False Then
+        str = str & " AM"
+    ElseIf m_pm = True Then
+        str = str & " PM"
+    End If
+    
+    convertToStr = str
+End Function
+
+
+'----------------------------------------------------
+'--- GET/LET/SET
+'----------------------------------------------------
+Public Property Let hour(hour As Integer): m_hour = hour: End Property
+Public Property Get hour() As Integer: hour = m_hour: End Property
+
+Public Property Let minute(minute As Integer): m_minute = minute: End Property
+Public Property Get minute() As Integer: minute = m_minute: End Property
+
+Public Property Let second(second As Integer): m_second = second: End Property
+Public Property Get second() As Integer: second = m_second: End Property
+
+
+
