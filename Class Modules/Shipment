@@ -1,0 +1,185 @@
+'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Class: Shipment
+
+'--- FIELDS
+
+'--- CONSTRUCTOR
+'Public Sub constructor(orders As Variant, Optional shipDate As String = "", Optional assignShipmentIDs As Boolean = False, Optional shipmentIdIndex As Integer)
+
+'--- GET/LET/SET
+
+'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+'--- OPTIONS
+Option Explicit
+Option Base 1
+
+
+'----------------------------------------------------
+'--- FIELDS
+'----------------------------------------------------
+Private m_orders As Variant
+Private m_firstSku As String
+Private m_shipDate As Date
+Private m_actualShipDate As Date
+Private m_totalPallets As Integer
+Private m_totalWeight As Double
+Private m_totalVolume As Double
+Private m_totalQuantity As Integer
+Private m_totalCartons As Integer
+Private m_shipmentRefId As String
+Private m_invoiceId As String
+Private m_shipToCountry As String
+Private m_shipToLoc As String
+Private m_shipFromLoc As String
+Private m_carrier As String
+Private m_scac As String
+Private m_arnNum As String
+Private m_proNum As String
+Private m_invSub As String
+Private m_shippingInfo As String
+
+
+'----------------------------------------------------
+'--- CONSTRUCTOR
+'----------------------------------------------------
+
+Public Sub constructor(orders As Variant, Optional shipDate As String = "", Optional assignShipmentIDs As Boolean = False, Optional shipmentIdIndex As Integer)
+
+    Dim sku As String:           sku = orders(LBound(orders)).sku
+    Dim shipToCountry As String: shipToCountry = orders(LBound(orders)).shipToCountry
+    Dim shipToLoc As String:     shipToLoc = orders(LBound(orders)).shipToLoc
+    Dim shipFromLoc As String:   shipFromLoc = orders(LBound(orders)).shipFromWarehouse
+    Dim carrier As String:       carrier = orders(LBound(orders)).carrier
+    
+    Dim scac As String:          scac = orders(LBound(orders)).scac
+    Dim arnNum As String:        arnNum = orders(LBound(orders)).arnNum
+    Dim proNum As String:        proNum = orders(LBound(orders)).asn
+    Dim invSub As String:        invSub = orders(LBound(orders)).invSub
+    
+    m_firstSku = sku
+    m_shipToCountry = shipToCountry
+    m_shipToLoc = shipToLoc
+    m_shipFromLoc = shipFromLoc
+    m_carrier = carrier
+
+    m_scac = scac
+    m_arnNum = arnNum
+    m_proNum = proNum
+    m_invSub = invSub
+   
+    m_shippingInfo = orders(LBound(orders)).shippingInfo
+    
+    m_actualShipDate = orders(LBound(orders)).actualShipDate
+    
+    If shipDate = "" Then
+        m_shipDate = orders(LBound(orders)).bestShipDate
+    Else
+        m_shipDate = CDate(shipDate)
+    End If
+    
+    Dim totalPallets As Integer:  totalPallets = 0
+    Dim totalWeight As Double:    totalWeight = 0
+    Dim totalVolume As Double:    totalVolume = 0
+    Dim totalQuantity As Integer: totalQuantity = 0
+    Dim totalCartons As Integer:  totalCartons = 0
+
+    Dim i As Integer: i = LBound(orders)
+    While i <= UBound(orders)
+        Call variantPush(m_orders, orders(i))
+        totalPallets = totalPallets + orders(i).pallets
+        totalWeight = totalWeight + orders(i).weight
+        totalVolume = totalVolume + orders(i).volume
+        totalQuantity = totalQuantity + orders(i).quantExp
+        totalCartons = totalCartons + orders(i).cartons
+        i = i + 1
+    Wend
+    
+    If totalPallets = 0 And totalWeight >= PALLET_PAYLOAD_WEIGHT_THRESHOLD Then
+        totalPallets = 1
+    End If
+
+    m_totalPallets = totalPallets
+    m_totalWeight = totalWeight
+    m_totalVolume = totalVolume
+    m_totalQuantity = totalQuantity
+    m_totalCartons = totalCartons
+
+    If assignShipmentIDs = True Then
+
+        Dim shipDateStr As String: shipDateStr = Format(m_shipDate, "yymmdd")
+        Dim shipDateInt As Long: shipDateInt = CLng(shipDateStr) * 1000
+        m_shipmentRefId = "r" & CStr(shipDateInt + shipmentIdIndex)
+        m_invoiceId = "i" & CStr(shipDateInt + shipmentIdIndex)
+    Else
+        m_shipmentRefId = orders(LBound(orders)).shipmentRefId
+        m_invoiceId = orders(LBound(orders)).invId
+    End If
+End Sub
+
+
+'----------------------------------------------------
+'--- GET/LET/SET
+'----------------------------------------------------
+Public Property Set orders(orders As Variant): Set m_orders = orders: End Property
+Public Property Get orders() As Variant: orders = m_orders: End Property
+
+Public Property Let firstSku(firstSku As String): m_firstSku = firstSku: End Property
+Public Property Get firstSku() As String: firstSku = m_firstSku: End Property
+
+Public Property Let shipDate(shipDate As Date): m_shipDate = shipDate: End Property
+Public Property Get shipDate() As Date: shipDate = m_shipDate: End Property
+
+Public Property Let actualShipDate(actualShipDate As Date): m_actualShipDate = actualShipDate: End Property
+Public Property Get actualShipDate() As Date: actualShipDate = m_actualShipDate: End Property
+
+Public Property Let totalPallets(totalPallets As Integer): m_totalPallets = totalPallets: End Property
+Public Property Get totalPallets() As Integer: totalPallets = m_totalPallets: End Property
+
+Public Property Let totalWeight(totalWeight As Double): m_totalWeight = totalWeight: End Property
+Public Property Get totalWeight() As Double: totalWeight = m_totalWeight: End Property
+
+Public Property Let totalVolume(totalVolume As Double): m_totalVolume = totalVolume: End Property
+Public Property Get totalVolume() As Double: totalVolume = m_totalVolume: End Property
+
+Public Property Let totalQuantity(totalQuantity As Integer): m_totalQuantity = totalQuantity: End Property
+Public Property Get totalQuantity() As Integer: totalQuantity = m_totalQuantity: End Property
+
+Public Property Let totalCartons(totalCartons As Integer): m_totalCartons = totalCartons: End Property
+Public Property Get totalCartons() As Integer: totalCartons = m_totalCartons: End Property
+
+Public Property Let shipmentRefId(shipmentRefId As String): m_shipmentRefId = shipmentRefId: End Property
+Public Property Get shipmentRefId() As String: shipmentRefId = m_shipmentRefId: End Property
+
+Public Property Let invoiceId(invoiceId As String): m_invoiceId = invoiceId: End Property
+Public Property Get invoiceId() As String: invoiceId = m_invoiceId: End Property
+
+Public Property Let shipToCountry(shipToCountry As String): m_shipToCountry = shipToCountry: End Property
+Public Property Get shipToCountry() As String: shipToCountry = m_shipToCountry: End Property
+
+Public Property Let shipToLoc(shipToLoc As String): m_shipToLoc = shipToLoc: End Property
+Public Property Get shipToLoc() As String: shipToLoc = m_shipToLoc: End Property
+
+Public Property Let shipFromLoc(shipFromLoc As String): m_shipFromLoc = shipFromLoc: End Property
+Public Property Get shipFromLoc() As String: shipFromLoc = m_shipFromLoc: End Property
+
+Public Property Let carrier(carrier As String): m_carrier = carrier: End Property
+Public Property Get carrier() As String: carrier = m_carrier: End Property
+
+Public Property Let scac(scac As String): m_scac = scac: End Property
+Public Property Get scac() As String: scac = m_scac: End Property
+
+Public Property Let arnNum(arnNumber As String): m_arnNum = arnNum: End Property
+Public Property Get arnNum() As String: arnNum = m_arnNum: End Property
+
+Public Property Let proNum(proNum As String): m_proNum = proNum: End Property
+Public Property Get proNum() As String: proNum = m_proNum: End Property
+
+Public Property Let invSub(invSub As String): m_invSub = invSub: End Property
+Public Property Get invSub() As String: invSub = m_invSub: End Property
+
+Public Property Let shippingInfo(shippingInfo As String): m_shippingInfo = shippingInfo: End Property
+Public Property Get shippingInfo() As String: shippingInfo = m_shippingInfo: End Property
+
+
+
