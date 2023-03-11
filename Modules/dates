@@ -1,0 +1,88 @@
+'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Module: dates
+
+'Function getHolidays(years As Variant) As Variant
+    'DEPENDENT ON SHEET "holidays"
+    
+'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+'--- OPTIONS
+Option Explicit
+Option Base 1
+
+
+Function getHolidays(years As Variant) As Variant
+
+    Dim data As Variant: data = getValues("holidays", 2, 2, 0, 4)
+    Dim lenData As Integer: lenData = UBound(data)
+    Dim lenYears As Integer: lenYears = UBound(years)
+    Dim holidays As Variant: ReDim holidays(1 To lenYears * lenData)
+
+    Dim i As Integer: i = 1
+    Dim a As Integer: a = 1
+    
+    While a <= lenYears 'for each year
+
+        Dim b As Integer: b = 1
+        While b <= lenData 'for each holiday per year
+
+            Dim dt As Date: dt = DateSerial(years(a), data(b, 1), data(b, 2))
+
+            'If fixed date, then check if date falls of weekend and adjust
+            If data(b, 3) = 0 And data(b, 4) = 0 Then
+
+                Dim wkdy As Integer: wkdy = weekday(dt)
+
+                If wkdy = 1 Then 'if sunday
+                    dt = DateAdd("d", 1, dt)
+                ElseIf wkdy = 7 Then 'if saturday
+                    dt = DateAdd("d", -1, dt)
+                End If
+
+            'If dynamic date, then calculate actuald date
+            ElseIf data(b, 3) <> 0 Then
+
+                Dim increment As Integer: increment = 1
+                 
+                If data(b, 3) < 0 Then
+                    increment = -1
+                End If
+                 
+                Dim xth As Integer:       xth = 0
+                Dim correctWeekDay As Boolean: correctWeekDay = False
+                Dim correctXth As Boolean:     correctXth = False
+                 
+                While correctWeekDay = False Or correctXth = False
+                 
+                    If weekday(dt) = data(b, 4) Then
+                        correctWeekDay = True
+                        xth = xth + increment
+                    Else
+                        correctWeekDay = False
+                    End If
+                    
+                    If xth = data(b, 3) Then
+                        correctXth = True
+                    Else
+                        correctXth = False
+                    End If
+
+                    If correctWeekDay = False Or correctXth = False Then
+                         dt = DateAdd("d", increment, dt)
+                    End If
+                Wend
+            End If
+
+            holidays(i) = DateSerial(Year(dt), month(dt), day(dt))
+            b = b + 1
+            i = i + 1
+        Wend
+         
+        a = a + 1
+    Wend
+
+    getHolidays = holidays
+End Function
+
+
+
