@@ -1,0 +1,37 @@
+### LOGIN TO AMAZON VENDOR CENTRAL ###
+loginTo_amazonVendorCentral()
+
+### DL SHIPPING LABELS ###
+accounts = ['usa', 'can']
+#accounts = ['amzn1.vg.d.AAH2ZZILO3ZSFBAENTAL4YL4MOXA', 'amzn1.vg.d.ADTNYEWRXNYSYDNH4FZ5OGKITPXA']
+accountCountries = ['usa', 'can']
+
+a = 0
+while a < len(accounts):
+
+  switchAccount_amazonVendorCentral(accounts[a])
+
+  for idx, arnIdx in enumerate(arn): #iterates through the arn list
+
+    if shipToCountry[idx] == accountCountries[a]:
+
+      place = str(a) + " " + accountCountries[a] + " " + str(idx) + " " + str(arn[idx])
+      print(place)
+
+      shipmentLink = 'https://vendorcentral.amazon.com/hz/vendor/members/shipment-mgr/printsplabel?shipmentId=' + str(arn[idx]) + '&scac=' + str(scac[idx])
+      get(driver, shipmentLink, secsAfter = 1)
+
+      i(driver, 'XPATH', "//kat-statusindicator[@id='print-label-success'][@style='display: block;']", attempts = 20, secsAfter = 2)
+
+      try:
+        newFileName = r'C:\Users\oscar\Downloads\Shipping Labels - ' + str(idx) + ' - ' + str(arn[idx]) + '.pdf'
+        list_of_files = glob.glob(r'C:\Users\oscar\Downloads\*.pdf') #get all files in Downloads folder that are pdfs
+        latest_file = max(list_of_files, key = os.path.getctime)     #get newest file in path
+        os.rename(latest_file, newFileName)                          #rename DL'd file (so it prints in order)
+      except:
+        print(place + ": unable to rename")
+
+  a = a + 1
+
+driver.quit()
+
