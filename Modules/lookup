@@ -1,0 +1,66 @@
+'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Module: lookup
+
+'--- VERTICAL LOOKUP
+'Function vLookup(searchKey As String, arr2d As Variant, lookupIndex As Integer, Optional maxResults As Integer = 1) As Variant
+'Function vLookupRe(searchKey As String, arr2d As Variant, headerRowIndex As Integer, headerColRegexPattern As String, Optional maxResults As Integer = 1) As Varian
+    'DEPENDENT ON MODULE fxGeneric_colRow: colre
+    
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+'--- OPTIONS
+Option Explicit
+Option Base 1
+
+
+'----------------------------------------------------
+'--- VERTICAL LOOKUP
+'----------------------------------------------------
+Function vLookup(searchKey As String, arr2d As Variant, lookupIndex As Integer, _
+                 Optional maxResults As Integer = 1, Optional makeLower As Boolean = False, Optional makeUpper As Boolean = False) As Variant
+
+    If maxResults <= 0 Then maxResults = 1
+    If maxResults > UBound(arr2d) Then maxResults = UBound(arr2d)
+    
+    Dim results As Variant
+    If maxResults >= 1 Then ReDim results(1 To maxResults)
+    
+    Dim rowIndex As Integer: rowIndex = LBound(arr2d, 1)
+    Dim matches As Integer: matches = 0
+    
+    
+    While matches < maxResults And _
+          rowIndex <= UBound(arr2d)
+          
+        If makeLower = True And makeUpper = False And LCase(searchKey) = LCase(arr2d(rowIndex, 1)) Then
+
+            matches = matches + 1
+            results(matches) = arr2d(rowIndex, lookupIndex)
+            
+        ElseIf makeLower = False And makeUpper = True And UCase(searchKey) = UCase(arr2d(rowIndex, 1)) Then
+
+            matches = matches + 1
+            results(matches) = arr2d(rowIndex, lookupIndex)
+            
+        ElseIf searchKey = arr2d(rowIndex, 1) Then
+
+            matches = matches + 1
+            results(matches) = arr2d(rowIndex, lookupIndex)
+            
+        End If
+        
+        rowIndex = rowIndex + 1
+    Wend
+
+    If maxResults = 1 Then vLookup = results(LBound(results))
+    If matches > 1 Then vLookup = results
+End Function
+
+Function vLookupRe(searchKey As String, arr2d As Variant, headerColRegexPattern As String, Optional headerRowIndex As Integer = 1, Optional maxResults As Integer = 1) As Variant
+    Dim lookupIndex As Integer: lookupIndex = colre(headerColRegexPattern, arr2d, headerRowIndex)
+    Dim results As Variant: results = vLookup(searchKey, arr2d, lookupIndex, maxResults)
+    vLookupRe = results
+End Function
+
+
+
