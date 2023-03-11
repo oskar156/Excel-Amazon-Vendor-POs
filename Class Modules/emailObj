@@ -1,0 +1,66 @@
+'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Class: emailObj
+
+'--- FIELDS
+
+'--- CONSTRUCTOR
+'Public Sub constructor(Optioanal subject As String = "", Optional body As String = "", Optional sentTo As String = "", Optional sentFrom As Variant = "", Optional sentDate As Date)
+
+'--- METHODS
+
+'--- GET/LET/SET
+
+'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+    
+'--- OPTIONS
+Option Explicit
+Option Base 1
+
+
+'----------------------------------------------------
+'--- FIELDS
+'----------------------------------------------------
+
+Private m_subject As String
+Private m_body As String
+Private m_sentTo As Variant
+Private m_sentFrom As String
+Private m_sentDate As Date
+
+
+'----------------------------------------------------
+'--- CONSTRUCTOR
+'----------------------------------------------------
+
+Public Sub constructor(Optional subject As String = "", Optional body As String = "", Optional sentTo As String = "", Optional sentFrom As Variant = "", Optional sentDate As Date)
+    m_subject = subject
+    m_body = body
+    m_sentTo = sentTo
+    m_sentFrom = sentFrom
+    m_sentDate = sentDate
+End Sub
+
+
+'----------------------------------------------------
+'--- GET/LET/SET
+'----------------------------------------------------
+
+Public Property Let subject(po As String): m_subject = subject: End Property
+Public Property Get subject() As String: subject = m_subject: End Property
+
+Public Property Let body(body As String): m_body = body: End Property
+Public Property Get body() As String: body = m_body: End Property
+
+Public Property Let sentTo(sentTo As Variant): m_sentTo = sentTo: End Property
+Public Property Get sentTo() As Variant: sentTo = m_sentTo: End Property
+
+Public Property Let sentFrom(sentFrom As String): m_sentFrom = sentFrom: End Property
+Public Property Get sentFrom() As String: sentFrom = m_sentFrom: End Property
+
+Public Property Let sentDate(sentDate As Date): m_sentDate = sentDate: End Property
+Public Property Get sentDate() As Date: sentDate = m_sentDate: End Property
+
+
+
+
+
