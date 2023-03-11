@@ -6,6 +6,6 @@ Includes:
 
   VBA Code for Excel automation and Order Database management.
 
-  VBA Code to address the limitations of the language (like the lack of .push() method for arrays).
+  VBA Code to address the limitations of the language (like the lack of a .push() method for arrays).
 
   Python Code for Selenium Browser Automation (to automate order processing in the Amazon Vendor Central website).
