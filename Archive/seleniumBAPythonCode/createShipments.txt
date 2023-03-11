@@ -1,0 +1,267 @@
+### LOGIN TO VC ###
+loginTo_amazonVendorCentral()
+
+accounts = ['usa', 'can']
+#accounts = ['amzn1.vg.d.AAH2ZZILO3ZSFBAENTAL4YL4MOXA', 'amzn1.vg.d.ADTNYEWRXNYSYDNH4FZ5OGKITPXA']
+accountCountries = ['usa', 'can']
+
+### SHIPMENT CREATION ###
+a = 0
+while a < len(accounts):
+
+  switchAccount_amazonVendorCentral(accounts[a])
+
+  s = 0
+  while s < len(shipToLocation):
+
+    if shipToCountry[s] == accountCountries[a]:
+
+      place = str(a) + "." + str(s) + ": " + shipToLocation[s] + " " + po[s][0]
+      
+      get(driver, 'https://vendorcentral.amazon.com/kt/vendor/members/afi-shipment-mgr/shipmentbuilder', secsAfter = 1)
+      
+      # SEARCHING FOR POS #
+      p = 0
+      while p < len(po[s]): #for each po
+        currentPo = po[s][p]
+        i(driver, 'XPATH', "//input [@id='freeTextFilterId']", action = 'send_keys', keysToSend = currentPo + ' ', attempts = 20, secsBefore = 1, secsAfter = 0.1)
+        p = p + 1
+      i(driver, 'XPATH', "//input [@id='freeTextFilterId']", action = 'send_keys', keysToSend = Keys.RETURN, attempts = 10, secsAfter = 1)
+
+      # CHANGING SHIP FROM LOCATION #
+
+      p = 0
+      while p < len(po[s]): #for each po
+        currentPo = po[s][p]
+        sfDropdown = i(driver, 'XPATH', "//kat-dropdown[@id='shipFrom-" + currentPo + "']/div", action = 'click', attempts = 1, secsAfter = 0.1)
+        shipFromOptions = i(driver, 'XPATH', "//div [@role='row']/div/kat-dropdown/div/div [@class='select-options']/div/div", attempts = 2, secsAfter = 0.2)
+
+        w = 0
+        sfoIndex = 0
+        shipFromWarehouseFound = False
+
+        while w < len(shipFromOptions) and shipFromWarehouseFound == False:
+          sfoResults = re.findall(shipFromStreetAddress, shipFromOptions[w].text)
+          if len(sfoResults) >= 1:
+            sfoIndex = w
+            shipFromWarehouseFound = True
+          w = w + 1
+        shipFromOptions[sfoIndex].click()
+        p = p + 1
+
+      # SELECTING POs #
+      p = 0
+      while p < len(po[s]): #for each po
+        currentPo = po[s][p]
+        currentAsin = asin[s][p]
+
+        dropdown = "expander-icon-" + currentPo #used to spelled as typo: epxander... #find the dropdown
+
+        #if p == 0 or (p >= 1 and currentPo != po[s][p - 1]): # NEEDS TESTING!
+        i(driver, 'ID', dropdown, action = 'click', attempts = 10)   
+
+        i(driver, 'ID', "addButton-" + currentPo + "-" + currentAsin, action = 'click', attempts = 10, secsAfter = 0.2)
+        p = p + 1
+
+      try:
+        i(driver, 'XPATH', "//kat-button [@label='Continue to step 2']", action = 'click', attempts = 10, secsBefore = 1, secsAfter = 4)
+      except:
+        #SCROLL TO BOTTOM
+        lenOfPage = driver.execute_script("window.scrollTo(0, document.body.scrollHeight);var lenOfPage=document.body.scrollHeight;return lenOfPage;")
+        match=False
+
+        while(match==False):
+          lastCount = lenOfPage
+          time.sleep(0.3)
+          lenOfPage = driver.execute_script("window.scrollTo(0, document.body.scrollHeight);var lenOfPage=document.body.scrollHeight;return lenOfPage;")
+          if lastCount==lenOfPage:
+            match=True
+
+        i(driver, 'XPATH', "//kat-button [@label='Continue to step 2']", action = 'click', attempts = 10, secsBefore = 1, secsAfter = 4)
+      
+      ### ADDING SHIPMENT DETAILS ###
+      i(driver, 'XPATH', "//kat-input[@id='packing-detail-carton-count']/input", action = 'clear', attempts = 5, secsAfter = 0.2) #Total cartons
+      i(driver, 'XPATH', "//kat-input[@id='packing-detail-carton-count']/input", action = 'clear and send_keys', keysToSend = cartonTotal[s], attempts = 5, secsAfter = 0.2) #Total cartons
+
+      i(driver, 'XPATH', "//kat-input[@id='packing-detail-pallet-count']/input", action = 'clear', attempts = 5, secsAfter = 0.2) #Total pallets
+      i(driver, 'XPATH', "//kat-input[@id='packing-detail-pallet-count']/input", action = 'clear and send_keys', keysToSend = palletTotal[s], attempts = 5, secsAfter = 0.2) #Total pallets
+
+      i(driver, 'ID', "packing-detail-pallet-type", action = 'click', attempts = 5, secsAfter = 0.5) #Pallet Type
+      i(driver, 'ID', "unstacked1", action = 'click', attempts = 5, secsAfter = 0.1) #select Unstackable
+      
+      i(driver, 'XPATH', "//kat-input[@id='packing-detail-weight']/input", action = 'clear', attempts = 5, secsAfter = 0.2)
+      i(driver, 'XPATH', "//kat-input[@id='packing-detail-weight']/input", action = 'clear and send_keys', keysToSend = weightTotal[s], attempts = 5, secsAfter = 0.2)
+
+      i(driver, 'XPATH', "//kat-input[@id='packing-detail-volume']/input", action = 'clear', attempts = 5, secsAfter = 0.2)
+      i(driver, 'XPATH', "//kat-input[@id='packing-detail-volume']/input", action = 'clear and send_keys', keysToSend = volumeTotal[s], attempts = 5, secsAfter = 0.2) #Total estimated volume
+
+      i(driver, 'XPATH', "//kat-input[@id='shipment-reference-input']/input", action = 'clear', attempts = 5, secsAfter = 0.2)
+      i(driver, 'XPATH', "//kat-input[@id='shipment-reference-input']/input", action = 'clear and send_keys', keysToSend = shipmentRefId[s], attempts = 5, secsAfter = 0.2) #Your shipment reference ID (optional)
+
+      i(driver, 'XPATH', "//kat-button [@label='Continue to step 3']", action = 'click', attempts = 10, secsBefore = 1, secsAfter = 4)
+
+      #DATE
+      dateFormat = ""
+      if accountCountries[a] == "usa":
+        dateFormat = "%m/%d/%Y"
+      elif accountCountries[a] == "can":
+        dateFormat = "%m/%d/%Y" #"%Y-%m-%d"
+
+      #CHECK PLACEHOLDER VALUE
+      extraDiv = True
+      dateInputValueAttribute = i(driver, 'XPATH', "//div[@id='pickup-details-div']/div/div/div/div/div/kat-date-picker/div/kat-input-group/kat-input", action = 'get attribute', attribute = "value")
+      if dateInputValueAttribute == []:
+        dateInputValueAttribute = i(driver, 'XPATH', "//div[@id='pickup-details-div']/div/div/div/div/kat-date-picker/div/kat-input-group/kat-input", action = 'get attribute', attribute = "value")
+        extraDiv = False
+
+      diva = ""
+      if type(dateInputValueAttribute) == list:
+        diva = dateInputValueAttribute[0]
+      elif type(dateInputValueAttribute) == str:
+        diva = dateInputValueAttribute
+
+      placeholderDate = datetime.datetime.strptime(diva, dateFormat)
+
+      if accountCountries[a] == "usa":
+        currShipDate = datetime.datetime.strptime(shipDate[s], dateFormat)
+      elif accountCountries[a] == "can":
+        currShipDate = datetime.datetime.strptime(shipDateCan[s], dateFormat)
+
+      #if currShipDate != placeholderDate: #if not equal, then go to curr and loop until valid
+
+      endLoop = False
+      while endLoop == False:
+        currShipDateStr = currShipDate.strftime(dateFormat)
+        if extraDiv == True:
+          i(driver, 'XPATH', "//div[@id='pickup-details-div']/div/div/div/div/div/kat-date-picker/div/kat-input-group/kat-input/input", action = 'clear and send_keys', keysToSend = currShipDateStr, attempts = 10, secsAfter = 2)
+        elif extraDiv == False:
+          i(driver, 'XPATH', "//div[@id='pickup-details-div']/div/div/div/div/kat-date-picker/div/kat-input-group/kat-input/input", action = 'clear and send_keys', keysToSend = currShipDateStr, attempts = 10, secsAfter = 2)
+        
+        i(driver, 'XPATH', "//kat-button[@label='Confirm and submit shipment']", action = 'click', attempts = 10, secsBefore = 1, secsAfter = 1)
+
+        errElement = i(driver ,'XPATH', "//kat-label[@id='builder-details-frd-constraint-label'][@style='display: flex;']")
+        errElement2 = i(driver ,'XPATH', "//kat-alert[@id='sb-po-chargeback-warning'][@size='small'][@dismissed='']")
+        #successElement = i(driver, 'XPATH', "//div[@class='smartfrd-success-footer-text']")
+        #print(errElement)
+        #print(errElement2)
+        #print(successElement)
+        if errElement == [] and errElement2 != []: #successElement != []: # and 
+          endLoop = True
+        else:
+          currShipDate += datetime.timedelta(days = 1)
+          
+
+      #i(driver, 'XPATH', "//kat-button[@label='Confirm and submit shipment']", action = 'click', attempts = 10, secsBefore = 1, secsAfter = 1)
+
+      finalShipDateStr = currShipDate.strftime("%m/%d/%Y")
+
+      ### GET ARN ###
+      newArnRaw = i(driver, 'TEXT', 'Shipment ID (ARN): ')
+      newArnMatches = regexLookup(newArnRaw.text, "[0-9]+", True)
+      newArn = newArnMatches[0]
+
+      arnFile.write('"' + shipToLocation[s] + '","' + po[s][0] + '","' + sku[s][0] + '","' + newArn + '","' + finalShipDateStr + '"' + "\n")
+      print(place + ' New Arn: ' + newArn + '     shipDate: ' + finalShipDateStr)
+
+      ### PREPARING CARTON LABELS ###
+      get(driver, 'https://vendorcentral.amazon.com/kt/vendor/members/afi-shipment-mgr/labelmapping?arn=' + str(newArn), secsAfter = 2.5)
+      i(driver, 'XPATH', "//kat-button[@label='Continue to step 2']", action = 'click', attempts = 5)
+      i(driver, 'XPATH', "//kat-radiobutton[@label='Case pack (single SKU cartons)']/div", action = 'click', attempts = 5)
+
+      #fill out carton info in the rows
+      html = driver.page_source
+
+      rowElementMatches = regexLookup(html, "row-[0-9]+", True)
+      lastRowMatch = rowElementMatches[len(rowElementMatches) - 1]
+      rowNumberMatches = regexLookup(lastRowMatch, "[0-9]+", True)
+
+      numberOfRows = int(rowNumberMatches[0])
+      row = 0
+      asinElement = i(driver, 'TEXT', "ASIN:", "get text")
+
+      while row <= numberOfRows:
+          
+        rowAsin = ""
+        if type(asinElement) == list:
+          rowAsin = asinElement[row][6:]
+        else:
+          rowAsin = asinElement[6:]
+
+        #packedElement = "0 / 1"
+        #packedElement = i(driver, 'XPATH', "//div[@id='row-" + str(row) + "']/div", "get text")
+
+        #packedText = packedElement[0]
+        #packedSplit = packedText.split(" / ")
+
+        #rowQuantity = int(packedSplit[1])
+        rowUnitsPerCarton = 1
+        #rowCartons = rowQuantity
+
+        n = 0
+        keepLooking = True
+        while n < len(asin[s]) and keepLooking == True:
+
+          if rowAsin == asin[s][n]:
+
+            rowUnitsPerCarton = int(unitsPerCarton[s][n])
+            rowCartons = int(cartons[s][n])
+            rowQuantity = int(quantity[s][n])
+
+            if rowQuantity < rowUnitsPerCarton: #if rowCartons is less than then unitsPerCarton...
+              rowUnitsPerCarton = rowCartons    #then set unitsPerCarton to rowCartons
+              rowCartons = 1
+            elif rowQuantity != rowCartons * rowUnitsPerCarton:
+              rowUnitsPerCarton = rowQuantity 
+              rowCartons = 1
+
+            keepLooking = False
+          n = n + 1
+
+        try:
+          i(driver, 'XPATH', "//div[@id='row-0']/div/div/kat-input/input", secsAfter = 0.1)[0].clear()
+          i(driver, 'XPATH', "//div[@id='row-0']/div/div/kat-input/input", secsAfter = 0.1)[0].send_keys(rowUnitsPerCarton)
+          i(driver, 'XPATH', "//div[@id='row-0']/div/div/kat-input/input", secsAfter = 0.1)[1].clear()
+          i(driver, 'XPATH', "//div[@id='row-0']/div/div/kat-input/input", secsAfter = 0.1)[1].send_keys(rowCartons)
+
+          i(driver, 'XPATH', "//div[@id='row-0']/div/kat-button[@label = 'Confirm']/button", secsAfter = 0.1).click() #confirm 
+
+          try:
+            i(driver, 'XPATH', "//div[@id='row-0']/div/kat-button[@label = 'Confirm']/button", secsAfter = 0.1, attempts = 1).click() #confirm 
+          except:
+            pass
+
+          time.sleep(0.5)
+          row = row + 1
+
+          #sometimes that darn feedback button is blocking the button we want to click
+          try:
+            i(driver, 'XPATH', "//kat-button[@label='Confirm and print labels']/button", action = 'click', secsBefore = 2)
+          except:
+            i(driver, 'XPATH', "//div[@id='hmd2f-exit']", action = 'click', secsAfter = 0.5)
+            i(driver, 'XPATH', "//kat-button[@label='Confirm and print labels']/button", action = 'click', secsBefore = 2)
+
+          ### PRINT LABELS ###
+          if palletTotal[s] >= 1: #only print ltl labels
+
+            i(driver, 'XPATH', "//kat-modal-footer/kat-button[@label='Print carton labels']/button", action = 'click', attempts = 5, secsAfter = 2)
+
+            driver.switch_to.window(driver.window_handles[1])
+            time.sleep(1)
+
+            loaded = i(driver, 'XPATH', "//kat-statusindicator[@id='print-label-success'][@style='display: block;']", action = 'check if loaded', attempts = 20, secsAfter = 0.5)
+
+            if loaded == False:
+              print("Unable to download carton labels for " + newArn + ". Please download it manually.")
+   
+            driver.close()
+            driver.switch_to.window(driver.window_handles[0])
+          else:
+            print("Carton labels for " + newArn + " not printed because it's small parcel.")
+
+        except:
+          print("Unable to prepare and download carton labels for " + newArn + ". Please download it manually.")
+
+    s = s + 1
+  a = a + 1
+
+driver.quit()
