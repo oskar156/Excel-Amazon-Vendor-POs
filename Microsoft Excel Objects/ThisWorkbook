@@ -1,0 +1,17 @@
+'Fixes auto-save bug
+
+Private Sub Workbook_Open()
+    'from: https://techcommunity.microsoft.com/t5/sharepoint/excel-files-stuck-at-quot-saving-quot/m-p/2494279
+    
+    Dim AutoSv As Boolean
+
+    If val(Application.Version) > 15 Then
+        AutoSv = ActiveWorkbook.AutoSaveOn
+    End If
+
+    If AutoSv Then
+        ActiveWorkbook.AutoSaveOn = False
+        AutoSv = ActiveWorkbook.AutoSaveOn
+    End If
+
+End Sub
