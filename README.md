@@ -1,6 +1,7 @@
 # Excel-Amazon-Vendor-POs
 Code and Resources for an Excel Spreadsheet I developed for work. It served as an order database and order-processing/reporting tool.
 
+================================================================
 
 Includes:
 
@@ -10,8 +11,7 @@ Includes:
 
   Python Code for Selenium Browser Automation (to automate order processing in the Amazon Vendor Central website).
 
-
-
+================================================================
 
 REFERENCES
 
