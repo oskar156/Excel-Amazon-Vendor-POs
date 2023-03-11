@@ -1,0 +1,747 @@
+'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+'Module: a_main01_newPos
+
+'--- PROCEDURES
+'1.1  Sub newPos_import()
+
+'1.2  Sub newPos_reports()
+'1.2B Sub newPos_reports_openOrderByDate()
+'1.2C Sub newPos_reports_openOrderBySKU()
+'1.2D Sub newPos_reports_late()
+'1.2E Sub newPos_reports_totals()
+'1.2FA Sub newPos_reports_backOrders()
+'1.2FB Sub newPos_backOrders_updateArchive()
+'1.2G Sub newPos_reports_todaysOrders()
+'1.2.PRINTREPORT Sub newPos_reports_print()
+
+'1.3  Sub newPos_email()
+'1.4A Sub newPos_makeChanges()
+'1.4B Sub newPos_submitChanges()
+'1.4C Sub newPos_cancelUpdate()
+'1.5  Sub newPos_updateEmail()
+
+'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+'--- OPTIONS
+Option Explicit
+Option Base 1
+
+
+'----------------------------------------------------
+'--- SUBS
+'----------------------------------------------------
+
+'function newPos_import()
+'{
+'  let procTitle = "newPos_import";
+'  let i, o = 0;
+'
+'
+'}
+
+''''''''''''''''''''
+' 1.1 newPos_import
+''''''''''''''''''''
+Sub newPos_import()
+    'User Input --- Prep
+    'User Input --- Ask User for their File Choice(s)
+    'User Input --- Ask User for Order Type
+    'User Input --- Ask User for EW Warehouse
+    'Add New POs to the Archive (for each file)
+    'Exit Message for the User
+    
+    Dim procTitle As String: procTitle = "newPos_import"
+    Dim i, o As Integer 'reserved for loops
+
+    'User Input --- Prep
+    Dim title As String:       title = ""
+    Dim msg As String:         msg = ""
+    Dim delim As String:       delim = ""
+    Dim limitRange As Boolean: limitRange = False
+    
+    'User Input --- Ask User for their File Choice(s)
+    Dim downloadsPath As String: downloadsPath = "C:\Users\" & Environ("username") & "\Downloads"
+    Dim extension As String:     extension = "csv"
+    Dim fileNames As Variant:    fileNames = listOfFileNamesInPath(downloadsPath, extension, EXCLUDE_NEWPO_CSV_FILE_LEFT) 'Get List of Valid CSVs in the Downloads Folder
+    Call endIfNotInit(fileNames, "No valid CSV files found in the Downloads folder. Import Canceled.", procTitle) 'quit if no files found
+
+    msg = ""
+    For i = LBound(fileNames) To UBound(fileNames)
+        msg = msg & "Enter " & i & " to choose: " & fileNames(i) & endl(1)
+    Next i
+    
+    title = "Choose file(s) (single or comma-seperated list)"
+    delim = ","
+    limitRange = True
+    
+    Dim fileChoices As Variant: fileChoices = prompt_inputSplitList_int(msg, title, delim, limitRange, LBound(fileNames), UBound(fileNames)) 'ask user
+
+    'User Input --- Ask User for Order Type
+    msg = ""
+    msg = msg & "Enter 1 for regular" & endl(1)
+    msg = msg & "Enter 2 for bulk" & endl(1)
+    msg = msg & "Enter 3 for direct" & endl(1)
+    
+    title = "Choose Order Type"
+    limitRange = True
+    Dim typeChoice As Integer: typeChoice = prompt_input_int(msg, title, limitRange, 1, 3) 'ask user
+
+    Dim orderType As String: orderType = ""
+    If typeChoice = 1 Then
+        orderType = "regular"
+    ElseIf typeChoice = 2 Then
+        orderType = "bulk"
+    ElseIf typeChoice = 3 Then
+        orderType = "direct"
+    Else
+        Call prompt_alert("Invalid Choice!" & endl(2) & "Import Canceled.", procTitle)
+        End 'quit if invalid input
+    End If
+    
+    'User Input --- Ask User for EW Warehouse
+    Dim whData As Variant: whData = getValues(WS_WAREHOUSES_EW_NAME, WS_WAREHOUSES_EW_ROW_FIRST, 1, 0, 0) 'Get List of EW Warehouses
+
+    msg = ""
+    For i = LBound(whData) To UBound(whData)
+        msg = msg + "Enter " & i & " for " & whData(i, WS_WAREHOUSES_EW_COL_NAME) & " (" & whData(i, WS_WAREHOUSES_EW_COL_STREET_ADDRESS) & ")" & endl(1)
+    Next i
+    
+    title = "Choose a Warehouse"
+    limitRange = True
+    Dim whChoice As Integer: whChoice = prompt_input_int(msg, title, limitRange, LBound(whData), UBound(whData)) 'ask user
+    Dim shipFromWarehouse As String: shipFromWarehouse = whData(whChoice, WS_WAREHOUSES_EW_COL_NAME) 'assign warehouse
+    
+    'Add New POs to the Archive (for each file)
+    Dim archive As archive: Set archive = New archive: Call archive.constructor
+    
+    Dim totalOrders As Integer: totalOrders = 0
+    Dim totalFiles As Integer:  totalFiles = 0
+    Dim filesParsed As String:  filesParsed = ""
+
+    For i = LBound(fileChoices) To UBound(fileChoices) 'for each file in fileChoices
+    
+        Dim fileName As String: fileName = fileNames(fileChoices(i))
+        Dim filepath As String: filepath = "C:\Users\" & Environ("username") & "\Downloads\" & fileName
+        
+        Dim newData As Variant:   newData = parse2dArrFromCsv(filepath, """,""")
+        Dim headerRow As Variant: headerRow = isoRow_from_2dArr(newData, 1, False)
+        
+        Dim firstTimeImport As Boolean: firstTimeImport = True
+
+        For o = LBound(newData, 1) + 1 To UBound(newData, 1) 'add each order to the archive '+1 to skip the headerrow
+            If newData(o, 1) <> "" Then 'skip empty rows
+                Dim dataRow As Variant: dataRow = isoRow_from_2dArr(newData, o, False)
+                Dim order As Object:    Set order = New order: Call order.constructor(dataRow, headerRow, firstTimeImport, shipFromWarehouse, orderType)
+                Call archive.addOrder(order, 1)
+            End If
+            totalOrders = totalOrders + 1
+        Next o
+        
+        Dim nuPath As String: nuPath = "C:\Users\" & Environ("username") & "\Downloads\" & "IMPORTED_" & fileName
+        Call rename(filepath, nuPath) 'rename parsed file so future imports won't include it
+        
+        totalFiles = totalFiles + 1
+        filesParsed = filesParsed & fileName & endl(1)
+    Next i
+    
+    'Exit Message for the User
+    Dim finalMsg As String: finalMsg = ""
+    finalMsg = finalMsg & totalFiles & " files parsed: " & endl(1)
+    finalMsg = finalMsg & filesParsed & endl(1)
+    finalMsg = finalMsg & totalOrders & " total orders added to Archive."
+    Call prompt_alert(finalMsg, "Import Completed")
+End Sub
+
+
+''''''''''''''''''''
+' 1.2 newPos_reports
+''''''''''''''''''''
+Sub newPos_reports()
+    'User Input --- Ask User for their Report Choice
+    'Execute Report Choice
+    
+    Dim procTitle As String: procTitle = "newPos_reports"
+
+    'User Input --- Ask User for their Report Choice
+    Dim limitToRange As Boolean: limitToRange = True
+    Dim title As String:         title = "Choose a Report"
+    Dim msg As String:           msg = "Choose a report to run: " & endl(2)
+    msg = msg & "Enter '1' for Today's Orders (VPOT)" & endl(1)
+    msg = msg & "Enter '2' for Open Orders sorted by Ship Date" & endl(1)
+    msg = msg & "Enter '3' for Open Orders sorted by SKU" & endl(1)
+    msg = msg & "Enter '4' for Totals" & endl(1)
+    msg = msg & "Enter '5' for Late" & endl(1)
+    msg = msg & "Enter '6' for Back Orders" & endl(1)
+    
+    Dim choice As Integer: choice = prompt_input_int(msg, title, limitToRange, 1, 6) 'ask user
+
+    'Execute Report Choice
+    If choice = 1 Then
+        Call newPos_reports_todaysOrders
+        
+    ElseIf choice = 2 Then
+        Call newPos_reports_openOrderByDate
+        
+    ElseIf choice = 3 Then
+        Call newPos_reports_openOrderBySKU
+        
+    ElseIf choice = 4 Then
+        Call newPos_reports_totals
+        
+    ElseIf choice = 5 Then
+        Call newPos_reports_late
+        
+    ElseIf choice = 6 Then
+        Call newPos_reports_backOrders
+
+    End If
+End Sub
+
+''''''''''''''''''''
+' 1.2B newPos_reports_openOrderByDate
+''''''''''''''''''''
+Sub newPos_reports_openOrderByDate()
+    Dim archive As archive: Set archive = New archive: Call archive.constructor
+    Dim Report As Reports:  Set Report = New Reports
+    Dim orders As Variant:  orders = archive.getOpenAndBackOrders()
+    Call Report.openOrders_byDate(orders)
+End Sub
+''''''''''''''''''''
+' 1.2C newPos_reports_openOrderBySKU
+''''''''''''''''''''
+Sub newPos_reports_openOrderBySKU()
+    Dim archive As archive: Set archive = New archive: Call archive.constructor
+    Dim Report As Reports:  Set Report = New Reports
+    Dim orders As Variant:  orders = archive.getOpenAndBackOrders()
+    Call Report.openOrders_bySku(orders)
+End Sub
+''''''''''''''''''''
+' 1.2D newPos_reports_late
+''''''''''''''''''''
+Sub newPos_reports_late()
+    Dim archive As archive: Set archive = New archive: Call archive.constructor
+    Dim Report As Reports:  Set Report = New Reports
+    Dim orders As Variant:  orders = archive.getLateOrders()
+    Call Report.late(orders)
+End Sub
+''''''''''''''''''''
+' 1.2E newPos_reports_totals
+''''''''''''''''''''
+Sub newPos_reports_totals()
+    Dim archive As archive:    Set archive = New archive: Call archive.constructor
+    Dim Report As Reports:     Set Report = New Reports
+    Dim openOrders As Variant: openOrders = archive.getOpenOrders()
+    Dim backOrders As Variant: backOrders = archive.getBackOrders()
+    Dim lateOrders As Variant: lateOrders = archive.getLateOrders()
+
+    Call Report.totals(openOrders, backOrders, lateOrders)
+End Sub
+''''''''''''''''''''
+' 1.2FA newPos_reports_backOrders
+''''''''''''''''''''
+Sub newPos_reports_backOrders()
+    Dim archive As archive: Set archive = New archive: Call archive.constructor
+    Dim Report As Reports:  Set Report = New Reports
+    Dim orders As Variant:  orders = archive.getBackOrders()
+    Call Report.backOrders(orders)
+End Sub
+''''''''''''''''''''
+' 1.2FB newPos_backOrders_updateArchive
+''''''''''''''''''''
+Sub newPos_backOrders_updateArchive()
+
+    Dim archive As archive:   Set archive = New archive: Call archive.constructor
+    Dim data As Variant:      data = getValues(ActiveWorkbook.ActiveSheet.name, 1, 1, 0, 0)
+    Dim firstRow As Integer:  firstRow = 4
+    Dim currentSku As String: currentSku = ""
+    Dim ous As Variant
+
+    Dim i As Integer: i = firstRow
+    While i <= UBound(data)
+        If data(i, 1) <> "" Then
+            currentSku = data(i, 1)
+        End If
+        
+        Dim po As String:      po = data(i, 2)
+        Dim orderDate As Date: orderDate = data(i, 5)
+
+        Dim cause As String:  cause = data(i, 8)
+        Dim action As String: action = data(i, 9)
+        Dim owner As String:  owner = data(i, 10)
+
+        If po <> "" Then
+
+            Dim colres As Variant
+            Dim values As Variant
+
+            Dim doTheUpdate As Boolean: doTheUpdate = False
+
+            If cause <> "" Then
+                Call variantPush(colres, COLRE_BO_CAUSE)
+                Call variantPush(values, cause)
+                doTheUpdate = True
+            End If
+            
+            If action <> "" Then
+                Call variantPush(colres, COLRE_BO_CORRECTIVE_ACTION)
+                Call variantPush(values, action)
+                doTheUpdate = True
+            End If
+            
+            If action <> "" Then
+                Call variantPush(colres, COLRE_OWNER)
+                Call variantPush(values, owner)
+                doTheUpdate = True
+            End If
+
+            If doTheUpdate = True Then
+                Dim ou As UpdateObj: Set ou = New UpdateObj: Call ou.cnstrcr(po, currentSku, orderDate, colres, values)
+                Call variantPush(ous, ou)
+                Erase colres
+                Erase values
+            End If
+        End If
+
+        i = i + 1
+    Wend
+
+    If isVariantArrayInit(ous) = True Then
+        Call archive.updateOrders(ous)
+    End If
+End Sub
+''''''''''''''''''''
+' 1.2G newPos_reports_todaysOrders
+''''''''''''''''''''
+Sub newPos_reports_todaysOrders()
+    Dim archive As archive: Set archive = New archive: Call archive.constructor
+    Dim Report As Reports:  Set Report = New Reports
+    Dim orders As Variant:  orders = archive.getTodaysOrders() 'Today's Orders (VPOT)
+    Call Report.todaysOrders(orders)
+End Sub
+''''''''''''''''''''
+' 1.2.PRINTREPORT newPos_reports_print
+''''''''''''''''''''
+Sub newPos_reports_print()
+    Dim procTitle As String: procTitle = "newPos_reports_print"
+
+    With ActiveSheet.PageSetup
+        .LeftMargin = Application.InchesToPoints(0.5)
+        .RightMargin = Application.InchesToPoints(0.5)
+        .TopMargin = Application.InchesToPoints(0.5)
+        .BottomMargin = Application.InchesToPoints(0.5)
+        .HeaderMargin = Application.InchesToPoints(0.2)
+        .FooterMargin = Application.InchesToPoints(0.2)
+        .orientation = xlPortrait 'xlLandscape
+        .Zoom = False
+        .FitToPagesWide = 1
+        .FitToPagesTall = False
+    End With
+
+    Dim ws As Worksheet: Set ws = ActiveSheet
+    Dim wsName As String: wsName = ws.name
+    Dim data As Variant: data = getValues(wsName, 1, 1, 0, 0)
+    Dim rows As Integer: rows = UBound(data, 1)
+    Dim cols As Integer: cols = UBound(data, 2)
+
+    If ActiveSheet.name = WS_NAME_TOTALS Then
+        rows = 40
+    End If
+
+    Dim copies As Integer: copies = 1
+    Dim collate As Boolean: collate = False
+    Dim preview As Boolean: preview = True
+
+    Range(Cells(1, 1), Cells(rows, cols)).Select
+        
+    Application.CommandBars.ExecuteMso ("PrintPreviewAndPrint")
+End Sub
+
+
+''''''''''''''''''''
+' 1.3 newPos_email
+''''''''''''''''''''
+Sub newPos_email()
+    Dim procTitle As String: procTitle = "newPos_email"
+    
+    Dim todaysDate As Date:            todaysDate = Now()
+    Dim todaysDateFormatted As String: todaysDateFormatted = month(todaysDate) & "/" & day(todaysDate) & "/" & Year(todaysDate)
+
+    'Get User Input from Macros WS
+
+    'RECIPIENTS =========================
+    Dim recipientsStr As String:    recipientsStr = getMacroParameter(procTitle, "Recipient Emails", False)
+    Dim recipientsArray As Variant: recipientsArray = getMacroParameter(procTitle, "Recipient Emails", True, ";")
+    Call endIfNotInit(recipientsArray, "Must specify recipeint(s)!" & endl(2) & "No emails sent", procTitle)  'quit if no recipients
+    
+    'SUBJECT =========================
+    Dim subject As String: subject = "Amazon Vendor - New POs (" & todaysDateFormatted & ")"
+    Dim customSubject As String: customSubject = getMacroParameter(procTitle, "Custom Subject", False)
+    Dim chosenSubject As String: chosenSubject = subject
+    If customSubject <> "" Then
+        chosenSubject = customSubject
+    End If
+    
+    'BODY =========================
+    Dim customBody As String:  customBody = getMacroParameter(procTitle, "Custom Body", False)
+    Dim isBodyHtml As Boolean: isBodyHtml = True
+    
+    Dim chosenBody As String
+    If customBody <> "" Then
+        chosenBody = customBody
+        isBodyHtml = False
+    Else
+        Const COMBINED_COL_SKU As Integer = 1
+        Const COMBINED_COL_BESTSHIPDATE As Integer = 2
+        Const COMBINED_COL_QUANTITY As Integer = 3
+        
+        Dim archive As archive: Set archive = New archive: Call archive.constructor
+        Dim todaysOrders As Variant:   todaysOrders = archive.getTodaysOrders() '.getTodaysOrders()
+        Dim todaysOrdersStr As String: todaysOrdersStr = ""
+
+        If isVariantArrayInit(todaysOrders) = True Then
+    
+            Call sortOrders(todaysOrders, "quantity", "asc")
+            Call sortOrders(todaysOrders, "sku", "desc")
+            Call sortOrders(todaysOrders, "bestShipDate", "asc")
+
+            Dim order As Variant
+            Dim combined As Variant
+            combined = variant2dPush(combined, "[]", 1, 3)
+        
+            Dim longestSkuLen As Integer: longestSkuLen = 0
+            Dim maxTabsNeeded As Integer: maxTabsNeeded = 0
+            Dim c As Integer
+            Dim t As Integer
+        
+            For Each order In todaysOrders
+            
+                c = 1
+                Dim found As Boolean: found = False
+                While c <= UBound(combined, 1) And found = False
+                    If combined(c, COMBINED_COL_SKU) = order.sku Then
+                        found = True
+                    Else
+                        c = c + 1
+                    End If
+                Wend
+            
+                If found = False Then
+                    combined = variant2dPush(combined, "[]", 1, 3)
+                    c = UBound(combined, 1)
+                    combined(c, COMBINED_COL_SKU) = order.sku
+                    combined(c, COMBINED_COL_BESTSHIPDATE) = order.bestShipDate
+                    combined(c, COMBINED_COL_QUANTITY) = order.quantExp
+                
+                    If longestSkuLen < Len(order.sku) Then longestSkuLen = Len(order.sku)
+                
+                Else
+                    combined(c, COMBINED_COL_QUANTITY) = combined(c, COMBINED_COL_QUANTITY) + order.quantExp
+                End If
+            Next
+        
+            Dim tabLength As Integer: tabLength = 8
+            maxTabsNeeded = CInt(longestSkuLen / tabLength) + 2
+        
+            c = 1
+            While c <= UBound(combined, 1)
+                todaysOrdersStr = todaysOrdersStr & "  <tr>" & endl(1)
+                todaysOrdersStr = todaysOrdersStr & "    <th>" & combined(c, COMBINED_COL_SKU) & "</th>" & endl(1)
+                todaysOrdersStr = todaysOrdersStr & "    <th>" & combined(c, COMBINED_COL_BESTSHIPDATE) & "</th>" & endl(1)
+                todaysOrdersStr = todaysOrdersStr & "    <th>" & combined(c, COMBINED_COL_QUANTITY) & "</th>" & endl(1)
+                todaysOrdersStr = todaysOrdersStr & "  </tr>" & endl(1)
+                c = c + 1
+            Wend
+        
+            Dim summary As String
+            summary = "----------------" & " <br>" & endl(1)
+            summary = summary & "Today's Orders:" & " <br>" & endl(1)
+            summary = summary & "<style> table, th, td {border:1px dotted;}</style>" & endl(1)
+            summary = summary & "<body>"
+            summary = summary & "<table>"
+            summary = summary & "  <tr>" & endl(1)
+            summary = summary & "    <th>" & "SKU" & "</th>" & endl(1)
+            summary = summary & "    <th>" & "Estimated<br>Ship Date" & "</th>" & endl(1)
+            summary = summary & "    <th>" & "Quantity" & "</th>" & endl(1)
+            summary = summary & "  </tr>" & endl(1)
+            summary = summary & todaysOrdersStr
+            todaysOrdersStr = summary & "</table>"
+            todaysOrdersStr = todaysOrdersStr & "</body>"
+        End If
+    
+        Dim htmlBody As String: htmlBody = ""
+        htmlBody = htmlBody & "Hello," & " <br><br>"
+        htmlBody = htmlBody & "We got some new POs, should we accept them?" & " <br>"
+        htmlBody = htmlBody & "The reports for " & todaysDateFormatted & " are attached." & " <br><br>"
+        htmlBody = htmlBody & "Oscar" & " <br><br>"
+        htmlBody = htmlBody & todaysOrdersStr
+        
+        chosenBody = htmlBody
+    End If
+    
+    'ATTACHMENTS =========================
+    Dim attachments As Variant:     attachments = getMacroParameter(procTitle, "Sheets to Attach", True)
+
+    Dim showPreview As Boolean: showPreview = True
+    Call sendEmail(recipientsStr, chosenSubject, chosenBody, attachments, showPreview, isBodyHtml)
+End Sub
+
+
+''''''''''''''''''''
+' 1.4A newPos_makeChanges()
+''''''''''''''''''''
+' -make the date input validation more streamlined it's messy now
+''''''''''''''''''''
+Sub newPos_makeChanges()
+    Dim procTitle As String: procTitle = "newPos_updateStatus"
+    Dim i As Integer 'reserved for loops
+
+    Dim archive As archive: Set archive = New archive: Call archive.constructor
+    Dim c As Variant: Dim v As Variant: Dim q As Variant
+    
+    'ask user for a shipDate
+    Dim msgShipDate As String: msgShipDate = "Enter a single ship date or ship date range: " & endl(1) & "DATE to DATE (M/D or M/D/YY or M/D/YYYY)" & endl(1) & "Enter 'today' for the POs ordered today"
+    Dim shipDateStr As String: shipDateStr = prompt_input(msgShipDate, procTitle, True)
+    If shipDateStr = ERROR_QUIT_PROCEDURE Then
+        Call prompt_alert("Update canceled.", procTitle)
+        End
+    End If
+    Dim shipDates As Variant
+    
+    If LCase(shipDateStr) = "today" Then
+        Dim today As Date: today = Date
+        Call variantPush(c, COLRE_ORDER_DATE): Call variantPush(v, today): Call variantPush(q, "=") 'ordered today
+    Else
+        If InStr(LCase(shipDateStr), "to") <> 0 Then
+            Dim splitstr As Variant: splitstr = SplitBase1(shipDateStr, "to", True)
+            Call variantPush(shipDates, CDate(splitstr(1)))
+            Call variantPush(shipDates, CDate(splitstr(2)))
+        ElseIf IsDate(shipDateStr) = True Then
+            Call variantPush(shipDates, CDate(shipDateStr))
+            Call variantPush(shipDates, CDate(shipDateStr))
+        Else
+            Call prompt_alert("Invalid Entry.", procTitle)
+            End
+        End If
+        
+        Call variantPush(c, COLRE_BEST_SHIP_DATE)
+        Call variantPush(c, COLRE_BEST_SHIP_DATE)
+        
+        On Error GoTo invalidDate
+        Call variantPush(v, shipDates(1))
+        Call variantPush(v, shipDates(2))
+        On Error GoTo 0
+        
+        Call variantPush(q, ">=")
+        Call variantPush(q, "<=")
+    End If
+    
+    'ask user for a sku
+    Dim skus As Variant: skus = prompt_inputSplitList("Enter a single SKU: (enter 'all' for all of them)", procTitle, ",", "True")
+    If skus(LBound(skus)) = ERROR_QUIT_PROCEDURE Then
+        Call prompt_alert("Update canceled.", procTitle)
+        End
+    End If
+
+    If skus(LBound(skus)) <> "all" Then
+        For i = LBound(skus) To UBound(skus)
+            Call variantPush(c, COLRE_SKU): Call variantPush(v, skus(i)): Call variantPush(q, "=")
+        Next i
+    End If
+
+    'GET ORDERS
+    Dim orders As Variant: orders = archive.getOrders(c, v, q)
+
+    If isVariantArrayInit(orders) = False Then
+        Call prompt_alert("No matching orders found." & endl(1) & "Update canceled.", procTitle)
+        End
+    End If
+    
+    If wsExists(WS_NAME_UPDATEORDERS) = True Then deleteSheet (WS_NAME_UPDATEORDERS)
+    Dim wsName As String: wsName = copySheet(WS_NAME_UPDATEORDERS_TEMPLATE, WS_NAME_UPDATEORDERS, WS_NAME_HIDDEN_DIVIDER_FIRST)
+
+    'get warehouses and paste
+    Dim headerRow As Variant: headerRow = isoRow_from_2dArr(getValues(wsName, 1, 1, 0, 0), WS_UPDATEORDERS_REALHEADERROW, False)
+    Dim col As col: Set col = New col: Call col.constructor(headerRow)
+    
+    Dim warehouseData As Variant: warehouseData = getValues(WS_WAREHOUSES_EW_NAME, 1, 1, 0, 0)
+    Dim warehouseList As String: warehouseList = ""
+    
+    For i = WS_WAREHOUSES_EW_ROW_FIRST To UBound(warehouseData, 1)
+        If warehouseData(i, WS_WAREHOUSES_EW_COL_STATUS) = WAREHOUSES_EW_STATUS_ACTIVE Then
+            warehouseList = warehouseList + warehouseData(i, WS_WAREHOUSES_EW_COL_NAME) + "," + " "
+        End If
+    Next i
+    warehouseList = Left(warehouseList, Len(warehouseList) - 2)
+    
+    Call setValue(wsName, warehouseList, WS_UPDATEORDERS_OPTIONSROW, col.re(COLRE_SHIP_FROM_WAREHOUSE))
+    
+    Call sortOrders(orders, "orderDate", "asc")
+    Call sortOrders(orders, "sku", "desc")
+    Call sortOrders(orders, "bestShipDate", "asc")
+    Call pasteOrders(wsName, orders, WS_UPDATEORDERS_FIRSTROW, WS_UPDATEORDERS_REALHEADERROW)
+    Exit Sub
+    
+invalidDate:
+    Call prompt_alert("Invalid Date entered." & endl(1) & "Update canceled.", procTitle)
+    End
+End Sub
+''''''''''''''''''''
+' 1.4B newPos_submitChanges()
+''''''''''''''''''''
+Sub newPos_submitChanges()
+    Dim procTitle As String: procTitle = "newPos_submitChanges"
+    
+    Dim i As Integer 'reserved for loops
+    
+    Dim data As Variant: data = getValues(WS_NAME_UPDATEORDERS, 1, 1, 0, 0)
+    Dim headerRow As Variant: headerRow = isoRow_from_2dArr(data, WS_UPDATEORDERS_REALHEADERROW, False)
+    Dim col As col: Set col = New col: Call col.constructor(headerRow)
+    Dim archive As archive: Set archive = New archive: Call archive.constructor
+    Dim updatedItems As String: updatedItems = "items updated:" & endl(2)
+    updatedItems = updatedItems & "PO  SKU    STATUS   bestShipDate  orderDate  shipFromWarehouse" & endl(2)
+    Dim updatedItemsCount As Integer: updatedItemsCount = 0
+    
+    Dim validStatusesStr As String:   validStatusesStr = getValues(WS_NAME_UPDATEORDERS, WS_UPDATEORDERS_OPTIONSROW, col.re(COLRE_STATUS), 1, 1)
+    Dim validWarehousesStr As String: validWarehousesStr = getValues(WS_NAME_UPDATEORDERS, WS_UPDATEORDERS_OPTIONSROW, col.re(COLRE_SHIP_FROM_WAREHOUSE), 1, 1)
+    Dim validStatuses As Variant:  validStatuses = SplitBase1(validStatusesStr, ",", True)
+    Dim validWarehouses As Variant:  validWarehouses = SplitBase1(validWarehousesStr, ",", True)
+    
+    For i = WS_UPDATEORDERS_FIRSTROW To UBound(data, 1)
+    
+        Dim po As String:         po = data(i, col.re(COLRE_PO))
+        Dim sku As String:        sku = data(i, col.re(COLRE_SKU))
+        
+        If po <> "" And sku <> "" Then
+        
+            Dim status As String:     status = data(i, col.re(COLRE_STATUS))
+            Dim orderDate As Date:    orderDate = data(i, col.re(COLRE_ORDER_DATE))
+            Dim shipFromWarehouse As String: shipFromWarehouse = data(i, col.re(COLRE_SHIP_FROM_WAREHOUSE))
+            Dim boCause As String: boCause = data(i, col.re(COLRE_BO_CAUSE))
+            
+            Dim bestShipDate As Date
+            
+            'check if status ship date and shipfrom warehouse are valid
+            Dim valid As Boolean: valid = True
+            
+            If IsDate(data(i, col.re(COLRE_BEST_SHIP_DATE))) = False Then
+                valid = False
+            Else
+                bestShipDate = data(i, col.re(COLRE_BEST_SHIP_DATE))
+            End If
+
+            Dim endLoop As Boolean
+            Dim v As Integer
+            
+            If valid = True And isVariantArrayInit(validStatuses) Then
+            
+                v = LBound(validStatuses)
+                endLoop = False
+
+                While v <= UBound(validStatuses) And endLoop = False
+
+                    If validStatuses(v) = status Then
+                        valid = True
+                        endLoop = True
+                    Else
+                        valid = False
+                    End If
+                    
+                    v = v + 1
+                Wend
+            End If
+
+            If valid = True Then
+                If IsDate(bestShipDate) = False Then
+                    valid = False
+                Else
+                    If bestShipDate < Date Then
+                        valid = False
+                    End If
+                End If
+            End If
+
+            If valid = True And isVariantArrayInit(validWarehouses) Then
+            
+                v = LBound(validWarehouses)
+                endLoop = False
+                
+                While v <= UBound(validWarehouses) And endLoop = False
+                
+                    If validWarehouses(v) = shipFromWarehouse Then
+                        valid = True
+                        endLoop = True
+                    Else
+                        valid = False
+                    End If
+                    
+                    v = v + 1
+                Wend
+            End If
+
+            If valid = True Then
+
+                Call archive.updateOrder(po, sku, status, bestShipDate, orderDate, shipFromWarehouse)
+                
+                If boCause <> "" Then Call archive.updateSingleOrder(po, sku, orderDate, COLRE_BO_CAUSE, boCause)
+                
+                updatedItems = updatedItems & po & " " & sku & " " & status & " " & bestShipDate & " " & orderDate & " " & shipFromWarehouse & endl(1)
+                updatedItemsCount = updatedItemsCount + 1
+            End If
+        End If
+    Next i
+    
+    deleteSheet (WS_NAME_UPDATEORDERS)
+    
+    Call prompt_alert("(" & updatedItemsCount & ") " & updatedItems, procTitle)
+End Sub
+''''''''''''''''''''
+' 1.4C newPos_cancelUpdate
+''''''''''''''''''''
+Sub newPos_cancelUpdate()
+    Dim procTitle As String: procTitle = "newPos_cancelUpdate"
+    
+    If wsExists(WS_NAME_UPDATEORDERS) Then
+        deleteSheet (WS_NAME_UPDATEORDERS)
+        Call prompt_alert("Update Canceled", procTitle)
+    End If
+End Sub
+
+
+''''''''''''''''''''
+' 1.5 newPos_updateEmail
+''''''''''''''''''''
+Sub newPos_updateEmail()
+    Dim procTitle As String: procTitle = "newPos_updateEmail"
+    
+    Dim todaysDate As Date:            todaysDate = Now()
+    Dim todaysDateFormatted As String: todaysDateFormatted = month(todaysDate) & "/" & day(todaysDate) & "/" & Year(todaysDate)
+    
+    'Get User Input from Macros WS
+    Dim attachments As Variant:     attachments = getMacroParameter(procTitle, "Sheets to Attach", True)
+    Dim recipientsStr As String:    recipientsStr = getMacroParameter(procTitle, "Recipient Emails", False)
+    Dim recipientsArray As Variant: recipientsArray = getMacroParameter(procTitle, "Recipient Emails", True, ";")
+    Call endIfNotInit(recipientsArray, "Must specify recipeint(s)!" & endl(2) & "No emails sent", procTitle)  'quit if no recipients   If isVariantArrayInit(recipientsArray) = False Then 'E
+    
+    Dim htmlBody As String: htmlBody = ""
+    htmlBody = htmlBody & "Hello," & endl(2)
+    htmlBody = htmlBody & "The updated Open Order reports for " & todaysDateFormatted & " are attached." & endl(2)
+    htmlBody = htmlBody & "Oscar"
+    Dim customBody As String: customBody = getMacroParameter(procTitle, "Custom Body", False)
+    Dim chosenBody As String: chosenBody = htmlBody
+    If customBody <> "" Then
+        chosenBody = customBody
+    End If
+    
+    Dim subject As String: subject = "Amazon Vendor - UPDATE (" & todaysDateFormatted & ")"
+    Dim customSubject As String: customSubject = getMacroParameter(procTitle, "Custom Subject", False)
+    Dim chosenSubject As String: chosenSubject = subject
+    If customSubject <> "" Then
+        chosenSubject = customSubject
+    End If
+    
+    Dim showPreview As Boolean: showPreview = True
+    Call sendEmail(recipientsStr, chosenSubject, chosenBody, attachments, showPreview)
+End Sub
+
+
+
